@@ -6,6 +6,8 @@ PROJECT:  8080 CPU
 LANGUAGE: VERILOG
 TARGET:   Xilinx xc3s1000-4
 
+OVERVIEW
+
 This core was implemented as a first project in Verilog by an old schematic 
 design engineer. There were a few reasons for implementing an 8080 processor.
 First, it was the first true general purpose processor available. Second, it
@@ -63,6 +65,77 @@ Intel interrupt controllers to place a full CALL instruction on the data lines,
 and thus achieve full arbitrary address vectoring. I have included such an
 advanced interrupt controller as an accessory to the cpu8080 core, also in
 verilog.
+
+IMPLEMENTATION
+
+The 8080 is implemented with a standard finite state machine. At the next
+positive edge after reset, the state, PC, all of the bus signals are reset to
+false, and the interrupt enable is set. All of the registers, including the
+stack, are left undefined at reset.
+
+At the fetch instruction state, the current pc is placed on the address bus,
+and a read instruction cycle occurs. In fetch2, the readmem signal is 
+deactivated, and the opcode is now on the data lines. We read it without
+latching.
+
+The instruction decode starts by splitting the instruction by the top two bits.
+This breaks down as follows:
+
+00 - General instructions, including carry control, rotates, double adds, 
+     increment and decrement, and many types of loads.
+01 - The "mov" instruction.
+10 - Register or memory to accumulator operations.
+11 - General instructions, including jumps and calls, interrupt enable and 
+     disable, and I/O.
+
+The move and accumulator operations are handled as one case. The others both
+break down into a further case based on the lower 6 bits of the instruction.
+
+Quite a few instructions are handled in a single case. For these instructions,
+the only required finish is to set the next pc, then set the next state back
+to fetch instruction.
+
+The other class of instruction is those that require other bus read or write
+transactions to complete. This includes instructions that read or write memory,
+and those that have a byte or word parameter following.
+
+To handle these, there are quite a few states I call "follow" states. When a
+fetch2 state handler needs extra states to complete, it sets the next state to
+one of these follow states, and that state will occur on the next positive 
+clock. The follow states can then chain further follow states, and so on,
+until the entire instruction is complete.
+
+To "talk" between states, several registers are employed as "mailboxes". For
+example, the regd register tells the follow states where to put fetched data
+meant for a register.
+
+Many multistate instructions are handled completely with follow states. However,
+a system exists for more complex instructions I call the "macro state 
+generator". This is just a ROM that holds a series of follow states to be 
+chained up to complete instructions. These are much like subroutines, and they
+use special follow states that get the next state from the macro table, then
+advance the macro state selector. The chain of follow states ends when either
+a terminal state is in the table, a state that ends by selecting the fetch
+instruction 1 as the next state, or because the macro table specifically
+selects that as the next state.
+
+The most commonly used macro states are the read and write states. It takes
+four states to write, and two to read. An instruction can use a lot of them,
+and do it repetitively. For example, the "xthl" instruction must perform two
+byte reads, followed by two byte writes. The read and write routines use
+general registers to keep the addresses they must read or write, and up to
+two bytes of data to be read or written.
+
+The only submodule in cpu8080 is the alu. It knows how to implement 8 kinds of
+arithmetic operations, add, add with carry, subtract, subtract with borrow, and,
+or, xor and compare. All of the 8080 flags are calculated within the alu. The
+compare operation is actually a subtract that discards the result, and passes
+the A operand out as the result.
+
+To operate the ALU, the input operands and flags are placed on its input 
+registers, then the output result and flags are moved to the appropriate
+registers. Each time this occurs, we give a full cycle for the alu to perform
+this action.
 
 Scott Moore
 

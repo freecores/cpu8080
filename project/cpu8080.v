@@ -37,7 +37,7 @@
 //     A standard read sequence is as follows:                                //
 //                                                                            //
 //     1. At the positive clock edge, readmem, readio or readint is asserted. //
-//     2. At the positive clock edge (or immediately), the external memory    //
+//     2. At the negative clock edge (or immediately), the external memory    //
 //        places data onto the data bus.                                      //
 //     3. At the next positive clock edge, the data is sampled, and the read  //
 //        Signal is deasserted.                                               //
