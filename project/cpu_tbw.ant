@@ -8,7 +8,7 @@
 // \   \   \/     Version : 8.2.02i
 //  \   \         Application : ISE
 //  /   /         Filename : cpu_tbw.ant
-// /___/   /\     Timestamp : Sat Sep 23 19:23:16 2006
+// /___/   /\     Timestamp : Fri Oct 20 21:19:57 2006
 // \   \  /  \ 
 //  \___\/\___\ 
 //
@@ -26,7 +26,7 @@ module cpu_tbw;
     wire writemem;
     wire readio;
     wire writeio;
-    reg intr = 1'b0;
+    wire intr;
     wire inta;
     reg waitr = 1'b0;
     reg reset = 1'b1;
@@ -70,6 +70,7 @@ module cpu_tbw;
         ANNOTATE_writemem;
         ANNOTATE_readio;
         ANNOTATE_writeio;
+        ANNOTATE_intr;
         ANNOTATE_inta;
         #OFFSET;
         forever begin
@@ -79,6 +80,7 @@ module cpu_tbw;
             ANNOTATE_writemem;
             ANNOTATE_readio;
             ANNOTATE_writeio;
+            ANNOTATE_intr;
             ANNOTATE_inta;
             #85;
         end
@@ -135,6 +137,14 @@ module cpu_tbw;
     task ANNOTATE_writeio;
         #0 begin
             $fdisplay(TX_FILE, "Annotate[%d,writeio,%b]", $time, writeio);
+            $fflush(TX_FILE);
+            TX_ERROR = TX_ERROR + 1;
+        end
+    endtask
+
+    task ANNOTATE_intr;
+        #0 begin
+            $fdisplay(TX_FILE, "Annotate[%d,intr,%b]", $time, intr);
             $fflush(TX_FILE);
             TX_ERROR = TX_ERROR + 1;
         end

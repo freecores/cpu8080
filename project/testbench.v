@@ -37,21 +37,34 @@ module testbench(addr,     // Address out
    output writemem;
    output readio;
    output writeio;
-   input  intr;
+   output intr;
    output inta;
    input  waitr;
    input  reset;
    input  clock;
 
-   // selector block, we only use select 1 and 2
-   select select1(addr, data, readio, writeio, romsel, ramsel, select3, 
+   // selector block, we only use select 1, 2 and 3
+   select select1(addr, data, readio, writeio, romsel, ramsel, intsel, 
                   select4, bootstrap, clock, reset);
 
    cpu8080 cpu(addr, data, readmem, writemem, readio, writeio, intr, inta, waitr,
                reset, clock);
-   rom rom(addr[9:0], data, romsel&readmem);
-   ram ram(addr[9:0], data, ramsel, readmem, writemem, bootstrap, ~clock);
+   rom rom(addr[9:0], data, romsel&readmem); // unclocked rom
+   // neg clocked ram
+   ram ram(addr[9:0], data, ramsel, readmem, writemem, bootstrap, clock);
+   // neg clocked interrupt controller
+   intcontrol intc(addr[2:0], data, writeio, readio, intsel, intr, inta, int0, int1,
+                   int2, int3, int4, int5, int6, int7, reset, clock);
 
+   // pull up unused interrupt lines
+   assign int0 = 1;
+   assign int1 = 1;
+   assign int2 = 1;
+   assign int3 = 1;
+   assign int4 = 1;
+   assign int5 = 1;
+   assign int6 = 1;
+   assign int7 = 1;
    // fake input device, always returns $42
    assign data = readio ? 8'h42: 8'bz;
 
@@ -120,7 +133,7 @@ endmodule
 // 6: M M M M M M I E - Select 3 mask
 // 7: C C C C C C X X - Select 3 compare
 // 8: M M M M M M I E - Select 4 mask
-// A: C C C C C C X X - Select 4 compare
+// 9: C C C C C C X X - Select 4 compare
 //
 // The main control bits 7:4 contain the one of 16 base addresses for the
 // select controller. It occupies 16 locations in the address space, of
@@ -250,7 +263,7 @@ module selectone(addr, data, write, read, selectin, selectout, reset);
    // Form select based on match
    assign selectout = ((iaddr & mask[7:2]) == comp) & mask[0];
 
-   always @(addr, write, read)
+   always @(addr, write, read, reset, selectin, data, comp, mask)
       if (reset) begin
 
       comp <= 6'b0; // clear registers
@@ -272,6 +285,240 @@ module selectone(addr, data, write, read, selectin, selectout, reset);
 
 endmodule
 
+////////////////////////////////////////////////////////////////////////////////
+//
+// INTERRUPT CONTROLLER
+//
+// Implements an 8 input interrupt controller. Each of the 8 interrupt lines has
+// selectable positive edge, negative edge, positive level, and negative level
+// triggering. Interrupts can be masked, and can be examined for state even when
+// they are masked. Each interrupt can be triggered under software control.
+// The priority for interrupts is fixed, with 0 being the highest, and 7 being
+// the lowest.
+//
+// The controller can be connected to I/O or memory addresses. The control
+// registers appear as:
+//
+//     7 6 5 4 3 2 1 0
+// 00: M M M M M M M M - Mask register
+// 01: S S S S S S S S - Status register
+// 02: A A A A A A A A - Active register
+// 03: P P P P P P P P - Polarity register
+// 04: E E E E E E E E - Edge enable register
+// 05: B B B B B B B B - Vector base address
+//
+// The mask register indicates if the interrupt source is to generate an 
+// interrupt. If the associated bit is 1, the interrupt is enabled, otherwise
+// disabled.
+//
+// The status register indicates the current interrupt line status, for direct
+// polling purposes.
+//
+// The active register is a flip/flop that goes to 1 anytime the trigger 
+// condition is satisfied. A 1 in this register will cause an interrupt to 
+// occur. If the mask for the interrupt is not enabled, the active bit will not
+// be set no matter what the trigger states.
+//
+// The polarity register gives the line polarity that will trigger an interrupt.
+// If the edge trigger bit is set, then the polarity indicates the resulting 
+// line AFTER the trigger. For example, an edge trigger with a 1 in the polarity
+// register indicates that the trigger is a positive edge trigger.
+//
+// The edge enable register places an edge detector on the line. This will
+// cause the interrupt to be triggered when an appropriate edge indicated by the
+// polarity occurs. The edge mode is selected by a 1 bit, and the level mode is
+// selected by a 0 bit. If the level mode is selected, the interrupt will occur
+// anytime the interrupt line matches the state of the polarity bit.
+//
+// The vector registers each provide the lower 8 bits of a 16 bit vector for 
+// each interrupt.
+//
+// The base register provides the upper 8 bits of a 16 bit vector for each
+// interrupt.
+//
+// An interrupt is generated anytime any bit is true in the active register. 
+// The interrupt request line is set true, and the controller will hold until
+// an interrupt acknowledge occurs. When an interrupt acknowledge occurs, the
+// controller will cycle through a three step sequence, with each sequence
+// activated by the interrupt acknowledge signal.
+//
+// First, a $cd is placed on the data lines, indicating a call instruction.
+// Second, the number of the interrupt that is highest priority is multipled 
+// * 4, and this is placed on the data lines.
+// Third, the vector base address is placed on the data lines.
+//
+// The net result is that the CPU is vectored to one of 256 pages in the address
+// space, with an offset of 4 bytes for each interrupt, as follows:
+//
+// 00: Vector 0
+// 04: Vector 1
+// 08: Vector 2
+// 0C: Vector 3
+// 10: Vector 4
+// 14: Vector 5
+// 18: Vector 6
+// 1C: Vector 7
+//
+
+module intcontrol(addr, data, write, read, select, intr, inta, int0, int1, int2,
+                  int3, int4, int5, int6, int7, reset, clock);
+
+   input [2:0] addr;   // control register address
+   inout [7:0] data;   // CPU data
+   input       write;  // CPU write
+   input       read;   // CPU read
+   input       select; // controller select
+   output      intr;   // interrupt request
+   input       inta;   // interrupt acknowledge
+   input       int0;   // interrupt line 0
+   input       int1;   // interrupt line 1
+   input       int2;   // interrupt line 2
+   input       int3;   // interrupt line 3
+   input       int4;   // interrupt line 4
+   input       int5;   // interrupt line 5
+   input       int6;   // interrupt line 6
+   input       int7;   // interrupt line 7
+   input       reset;  // CPU reset
+   input       clock;  // CPU clock
+
+   reg [7:0] mask;     // interrupt mask register
+   reg [7:0] active;   // interrupt active register
+   reg [7:0] polarity; // interrupt polarity register
+   reg [7:0] edges;    // interrupt edge control
+   reg [7:0] vbase;    // vector base
+   reg [7:0] intpe;    // positive edge interrupt detection
+   reg [7:0] intne;    // negative edge interrupt detection
+   reg [7:0] datai; // data from output selector
+   reg [3:0] state; // state machine to run vectors
+
+   wire [7:0] activep;  // interrupt active pending
+
+   // handle register reads and writes
+
+   always @(negedge clock)
+      if (reset) begin // reset
+
+      mask     <= 8'b0; // clear mask
+      active   <= 8'b0; // clear active
+      polarity <= 8'b0; // clear polarity
+      edges    <= 8'b0; // clear edge
+      vbase    <= 8'b0; // clear base
+      state    <= 4'b0; // clear state machine
+
+   end else if (write&select) begin // CPU write
+
+      case (addr)
+
+         0: mask     <= data; // set mask register
+         2: active   <= data|activep; // set active register
+         3: polarity <= data; // set polarity register
+         4: edges    <= data; // set edge register
+         5: vbase    <= data; // set base register
+
+      endcase
+
+   end else if (read&select) begin // CPU read
+
+      case (addr)
+
+         0: datai <= mask; // get mask register
+         // get current line statuses
+         1: datai <= { int7, int6, int5, int4, int3, int2, int1, int0 };
+         2: datai <= active; // get active register
+         3: datai <= polarity; // get polarity register
+         4: datai <= edges; // get edge register
+         5: datai <= vbase; // get base register
+
+      endcase
+
+   end else if (inta) begin // CPU interrupt acknowledge 
+
+      // run vectoring state machine
+      case (state)
+
+         // wait for inta, and assert 1st instruction byte
+
+         0: begin
+
+            datai <= 8'hcd; // place call instruction on datalines
+            state <= 1; // advance to low address
+
+         end
+
+         // assert low byte address
+         1: begin
+         
+            // decode priority
+            if (active&8'h01)      datai <= 8'h00;
+            else if (active&8'h02) datai <= 8'h04;
+            else if (active&8'h04) datai <= 8'h08;
+            else if (active&8'h08) datai <= 8'h0C;
+            else if (active&8'h10) datai <= 8'h10;
+            else if (active&8'h20) datai <= 8'h14;
+            else if (active&8'h40) datai <= 8'h18;
+            else if (active&8'h80) datai <= 8'h1C;
+            state <= 2; // advance to high address
+         
+         end
+         
+         // assert high address
+         2: if (inta) begin
+         
+            datai <= vbase; // place page to vector
+            // reset highest priority interrupt
+            if (active&8'h01)      active[0] <= activep[0];
+            else if (active&8'h02) active[1] <= activep[1];
+            else if (active&8'h04) active[2] <= activep[2];
+            else if (active&8'h08) active[3] <= activep[3];
+            else if (active&8'h10) active[4] <= activep[4];
+            else if (active&8'h20) active[5] <= activep[5];
+            else if (active&8'h40) active[6] <= activep[6];
+            else if (active&8'h80) active[7] <= activep[7];
+            state <= 0; // back to start state
+         
+         end
+
+      endcase
+
+   end else active <= active|activep; // set active interrupts
+      
+   // form active interrupt bits
+   assign activep = mask & (({ int7, int6, int5, int4, // levels
+                               int3, int2, int1, int0 }^polarity & ~edges)|
+                           (intpe&polarity&edges)| // positive edges
+                           (intne&~polarity&edges)); // negative edges
+   
+   // form interrupt edges
+   always @(posedge int0) intpe[0] <= 1;
+   always @(posedge int1) intpe[1] <= 1;
+   always @(posedge int2) intpe[2] <= 1;
+   always @(posedge int3) intpe[3] <= 1;
+   always @(posedge int4) intpe[4] <= 1;
+   always @(posedge int5) intpe[5] <= 1;
+   always @(posedge int6) intpe[6] <= 1;
+   always @(posedge int7) intpe[7] <= 1;
+   always @(negedge int0) intne[0] <= 1;
+   always @(negedge int1) intne[1] <= 1;
+   always @(negedge int2) intne[2] <= 1;
+   always @(negedge int3) intne[3] <= 1;
+   always @(negedge int4) intne[4] <= 1;
+   always @(negedge int5) intne[5] <= 1;
+   always @(negedge int6) intne[6] <= 1;
+   always @(negedge int7) intne[7] <= 1;
+
+   assign data = read&select|inta ? datai: 8'bz; // enable output data
+   assign intr = |active; // request interrupt on any active
+
+endmodule
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// ROM CELL
+//
+// Hold the test instructions. Forms a simple read only cell, with tri-state
+// enable outputs only.
+//
+
 module rom(addr, data, dataeno);
 
    input [9:0] addr;
@@ -282,35 +529,7 @@ module rom(addr, data, dataeno);
    
    always @(addr) case (addr)
 
-      //
-      // Elementary program to start up system. Initalizes the select unit to
-      // have the rom followed by the ram, 1kb each. Then we perform a test
-      // that checks the CPU and the RAM are working, then halt.
-      //
-      0:  datao = 8'h3e; // mvi a,$fd    ! enable select 1 to $0000, 1kb
-      1:  datao = 8'hfd;
-      2:  datao = 8'hd3; // out $02      ! select 1 mask register
-      3:  datao = 8'h02;
-      4:  datao = 8'h3e; // mvi a,$04    ! enable select 2 to $0400, 1kb
-      5:  datao = 8'h04;
-      6:  datao = 8'hd3; // out $05      ! select 2 compare register
-      7:  datao = 8'h05;
-      8:  datao = 8'h3e; // mvi a,$fd
-      9:  datao = 8'hfd;
-      10: datao = 8'hd3; // out $04
-      11: datao = 8'h04;
-      12: datao = 8'h3e; // mvi a,$00    ! exit bootstrap mode 
-      13: datao = 8'h00;
-      14: datao = 8'hd3; // out $00
-      15: datao = 8'h00;
-      16: datao = 8'h31; // lxi sp,$0800 ! place stack at top of ram
-      17: datao = 8'h00;
-      18: datao = 8'h08;
-      19: datao = 8'h01; // lxi b,$1234  ! load test value
-      20: datao = 8'h34;
-      21: datao = 8'h12;
-      22: datao = 8'hc5; // push b       ! save on stack
-      23: datao = 8'he1; // pop h        ! place in hl
+      `include "test.lst" // get contents of memory
      
       default datao = 8'h76; // hlt
    
@@ -320,6 +539,18 @@ module rom(addr, data, dataeno);
    assign data = dataeno ? datao: 8'bz;
    
 endmodule
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// RAM CELL
+//
+// A clocked ram cell with individual select, read and write signals. Data is
+// written on the positive edge when write is true. Data is enabled for output
+// by the read signal asyncronously.
+//
+// A bootstrap mode is implemented that, when true, overrides the read signal
+// and keeps the output drivers off.
+//
 
 module ram(addr, data, select, read, write, bootstrap, clock);
 
@@ -334,7 +565,7 @@ module ram(addr, data, select, read, write, bootstrap, clock);
    reg [7:0] ramcore [1023:0]; // The ram store
    reg [7:0] datao;
    
-   always @(posedge clock) 
+   always @(negedge clock) 
       if (select) begin
 
          if (write) ramcore[addr] <= data;

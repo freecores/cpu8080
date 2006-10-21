@@ -15,7 +15,7 @@ Description
 This is an 8080 core I created as a project to get to know Verilog.
 
 The 8080 was the second in the series 8008->8080->Z80. It was the first 
-commercially available single chip CPU (disregarding the required clock and    *
+commercially available single chip CPU (disregarding the required clock and
 demultiplexor chips). Besides being an interesting project, it also can serve as
 a very compact core, suitable for a supervisor role on an FPGA with other
 blocks. It has extensive support, all freely available, including assemblers,

@@ -16,23 +16,38 @@
 //     constant with the exception of the data bus. The control signals are   //
 //     fully decoded (unlike the orignal 8080), and features read and write   //
 //     signals for both memory and I/O space. The I/O space is an 8 bit       //
-//     address as in the original 8080.                                       //
+//     address as in the original 8080. It does NOT echo the lower 8 bits to  //
+//     the higher 8 bits, as was the practice in some systems.                //
 //                                                                            //
 //     Like the original 8080, the interrupt vectoring is fully external. The //
 //     the external controller forces a full instruction onto the data bus.   //
 //     The sequence begins with the assertion of interrupt request. The CPU   //
 //     will then assert interrupt acknowledge, then it will run a special     //
-//     read cycle with readint asserted for each cycle of a possibly          //
+//     read cycle with inta asserted for each cycle of a possibly             //
 //     multibyte instruction. This matches the original 8080, which typically //
 //     used single byte restart instructions to form a simple interrupt       //
 //     controller, but was capable of full vectoring via insertion of a jump, //
 //     call or similar instruction.                                           //
+//     Note that the interrupt vector instruction should branch. This is      //
+//     because the PC gets changed by the vector instruction, so if it does   //
+//     not branch, it will have skipped a number of bytes after the interrupt //
+//     equivalent to the vector instruction. The only instructions that       //
+//     should really be used to vector are jmp, rst and call instructions.    //
+//     Specifically, rst and call instruction compensate for the pc movement  //
+//     by putting the pc unmodified on the stack.                             //
 //                                                                            //
 //     The memory, I/O and interrupt fetches all obey a simple clocking       //
 //     sequence as follows. The CPU uses the positive clock edge to assert    //
 //     and sample signals and data. The external logic theoretically uses the //
-//     positive edge to check signal assertions and sample data, but it can   //
+//     negative edge to check signal assertions and sample data, but it can   //
 //     either use the negative edge, or actually be asynronous logic.         //
+//     The only caution here is that a read device that samples read signals  //
+//     from the CPU on a postive edge will present data too late, since read  //
+//     cycles are only one cycle long. This can be fixed with a wait state.   //
+//     Negative external clockers may also have an issue with the fact that   //
+//     the net read time is 1/2 cycle, the negative mid cycle clock to the    //
+//     next positive clock. Again, and perhaps unfortunately, the fix is to   //
+//     add an external wait state.                                            //
 //                                                                            //
 //     A standard read sequence is as follows:                                //
 //                                                                            //
@@ -45,24 +60,15 @@
 //     A standard write sequence is as follows:                               //
 //                                                                            //
 //     1. At the positive edge, data is asserted on the data bus.             //
-//     2. At the postive clock edge, writemem or writeio is asserted.         //
+//     2. At the next postive clock edge, writemem or writeio is asserted.    //
 //     3. At the next positive clock edge, writemem or writeio is deasserted. //
-//     4. At the positive edge, the data is deasserted.                       //
+//     4. At the next positive edge, the data is deasserted.                  //
 //                                                                            //
 // Dependencies:                                                              //
 //                                                                            //
 // Revision:                                                                  //
 // Revision 0.01 - File Created                                               //
 // Additional Comments:                                                       //
-//                                                                            //
-// Notes:                                                                     //
-//                                                                            //
-// 1. Auxiliary carry is not complete.                                        //
-//                                                                            //
-// 2. inta should take place instead of readmem for each interrupt vector     //
-//    instruction that is fetched. This behavior matches the original Intel   //
-//    interrupt controller, and it should not be required to gate readmem OFF //
-//    during interrupt cycles.                                                //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -203,6 +209,7 @@ module cpu8080(addr,     // Address out
    reg    [1:0]  popdes;      // POP destination code
    reg    [5:0]  statesel;    // state map selector
    reg    [4:0]  nextstate;   // next state output
+   reg           eienb;       // interrupt enable delay shift reg
    
    // Register file. Note that 3'b110 (6) is not used, and is the code for a
    // memory reference.
@@ -217,6 +224,7 @@ module cpu8080(addr,     // Address out
    reg           zero; // zero bit
    reg           parity; // parity bit
    reg           ei; // interrupt enable
+   reg           intcyc; // in interrupt cycle
 
    // ALU communication
 
@@ -245,18 +253,31 @@ module cpu8080(addr,     // Address out
       readio <= 0;
       writeio <= 0;
       inta <= 0;
-      ei <= 1; // interrupts on on reset, check this
+      intcyc <= 0;
+      ei <= 1;
+      eienb <= 0;
 
    end else case (state)
        
       `cpus_fetchi: begin // start of instruction fetch
        
-         // interrupt is like a normal instruction cycle, except we set the 
-         // acknowledge for the entire instruction fetch.
-         if (intr && ei) inta <= 1; // interrupt request, set interrupt acknowledge
-         else inta <= 0; // clear interrupt acknowledge
+         // if interrupt request is on, enter interrupt cycle, else exit it now
+         if (intr&&ei) begin
+
+            intcyc <= 1; // enter interrupt cycle
+            inta <= 1; // activate interrupt acknowledge
+            ei <= 0; // disable interrupts
+
+         end else begin
+
+            intcyc <= 0; // leave interrupt cycle
+            readmem <= 1; // activate instruction memory read
+
+         end
+            
          addr <= pc; // place current program count on output
-         readmem <= 1; // activate instruction memory read
+         if (eienb) ei <=1; // process delayed interrupt enable
+         eienb <=0; // reset interrupt enabler
          state <= `cpus_fetchi2; // next state
        
       end
@@ -264,6 +285,7 @@ module cpu8080(addr,     // Address out
       `cpus_fetchi2: begin // complete instruction memory read
        
          readmem <= 0; // Deactivate instruction memory read
+         inta <= 0; // and interrupt acknowledge
           
          // We split off the instructions into 4 groups. Most of the 8080
          // instructions are in the MOV and ACC operations class.
@@ -842,7 +864,10 @@ module cpu8080(addr,     // Address out
 
                      raddrhold <= pc+1; // pick up call address
                      waddrhold <= sp-2; // place address on stack
-                     { wdatahold2, wdatahold } <= pc+3; // of address after call
+                     // if interrupt cycle, use current pc, else use address
+                     // after call
+                     if (intcyc) { wdatahold2, wdatahold } <= pc;
+                     else { wdatahold2, wdatahold } <= pc+3;
                      sp <= sp-2; // pushdown stack
                      statesel <= `mac_call; // finish CALL
                      state <= `cpus_read;
@@ -927,6 +952,10 @@ module cpu8080(addr,     // Address out
 
                      pc <= data & 8'b00111000; // place restart value in PC
                      waddrhold <= sp-2; // place address on stack
+                     // if interrupt cycle, use current pc, else use address
+                     // after call
+                     if (intcyc) { wdatahold2, wdatahold } <= pc;
+                     else { wdatahold2, wdatahold } <= pc+3;
                      { wdatahold2, wdatahold } <= pc+1; // of address after call
                      sp <= sp-2; // pushdown stack
                      statesel <= `mac_writedbyte; // finish RST
@@ -1040,7 +1069,8 @@ module cpu8080(addr,     // Address out
 
          addr <= raddrhold; // place address on output
          raddrhold <= raddrhold+1; // next address
-         readmem <= 1; // activate instruction memory read
+         if (intcyc) inta <= 1; // activate interrupt acknowledge
+         else readmem <= 1; // activate instruction memory read
          state <= `cpus_read2; // next state
          
       end
@@ -1052,6 +1082,7 @@ module cpu8080(addr,     // Address out
             rdatahold2 <= rdatahold; // shift data
             rdatahold <= data; // read new data
             readmem <= 0; // deactivate instruction memory read
+            inta <= 0; // deactivate interrupt acknowledge
             state <= nextstate; // get next macro state
             statesel <= statesel+1; // and index next in macro 
 
@@ -1140,8 +1171,11 @@ module cpu8080(addr,     // Address out
 
       `cpus_halt: begin // Halt waiting for interrupt
 
-         // nothing to do, we leave the state at halt, which will cause it to
-         // be executed continually until we exit.
+         // If there is an interrupt request and interrupts are enabled, then we
+         // can leave halt. Otherwise we stay here.
+         if (intr&&ei) state <= `cpus_fetchi; // Fetch next instruction
+         else state <= `cpus_halt;
+        
 
       end
 
