@@ -10,8 +10,8 @@
 //  \___\/\___\ 
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef H_workMtestbench_H
-#define H_workMtestbench_H
+#ifndef H_workMintcontrol_H
+#define H_workMintcontrol_H
 
 #ifdef _MSC_VER
 #pragma warning(disable: 4355)
@@ -23,17 +23,18 @@
 #include "xsim.h"
 #endif
 
-class workMtestbench : public HSim__s5{
+class workMintcontrol : public HSim__s5{
 public: 
-    workMtestbench(const char *instname);
-    ~workMtestbench();
+    workMintcontrol(const char *instname);
+    ~workMintcontrol();
     void setDefparam();
     void constructObject();
     void moduleInstantiate(HSimConfigDecl *cfg);
     void connectSigs();
     void reset();
     virtual void archImplement();
-    HSim__s1 us[24];
+    HSim__s1 us[18];
+    HSim__s3 uv[9];
 };
 
 #endif

@@ -40,7 +40,7 @@ public:
     HSim__s2 *driver_us4;
     HSim__s2 *driver_us5;
     HSim__s1 us[17];
-    HSim__s3 uv[26];
+    HSim__s3 uv[28];
 };
 
 #endif

@@ -57,8 +57,17 @@ va_list vap)
 }
 
 
-#include "work/cpu8080/cpu8080.h"
+#include "work/intcontrol/intcontrol.h"
 static HSim__s6* IF6(HSim__s6 *Arch,const char* label,int nGenerics, 
+va_list vap)
+{
+    HSim__s6 *blk = new workMintcontrol(label); 
+    return blk;
+}
+
+
+#include "work/cpu8080/cpu8080.h"
+static HSim__s6* IF7(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMcpu8080(label); 
@@ -67,7 +76,7 @@ va_list vap)
 
 
 #include "work/testbench/testbench.h"
-static HSim__s6* IF7(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF8(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMtestbench(label); 
@@ -76,7 +85,7 @@ va_list vap)
 
 
 #include "work/glbl/glbl.h"
-static HSim__s6* IF8(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF9(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMglbl(label); 
@@ -95,9 +104,10 @@ public:
         (*cfgvh).addVlogModule("select", (HSimInstFactoryPtr)IF3);
         (*cfgvh).addVlogModule("rom", (HSimInstFactoryPtr)IF4);
         (*cfgvh).addVlogModule("ram", (HSimInstFactoryPtr)IF5);
-        (*cfgvh).addVlogModule("cpu8080", (HSimInstFactoryPtr)IF6);
-        (*cfgvh).addVlogModule("testbench", (HSimInstFactoryPtr)IF7);
-        (*cfgvh).addVlogModule("glbl", (HSimInstFactoryPtr)IF8);
+        (*cfgvh).addVlogModule("intcontrol", (HSimInstFactoryPtr)IF6);
+        (*cfgvh).addVlogModule("cpu8080", (HSimInstFactoryPtr)IF7);
+        (*cfgvh).addVlogModule("testbench", (HSimInstFactoryPtr)IF8);
+        (*cfgvh).addVlogModule("glbl", (HSimInstFactoryPtr)IF9);
         HSim__s5 * topvl = 0;
         topvl = new workMcpu__tbw("cpu_tbw");
         topvl->moduleInstantiate(cfgvh);
