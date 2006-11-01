@@ -36,7 +36,6 @@ public:
     HSim::ValueS* up1Func(HSim::VlogVarType& outVarType, int& outNumScalars, int inNumScalars);
     class cu0 : public HSimVlogTask{
     public: 
-        HSim__s3 uv[1];
         cu0(workMcpu__tbw* arch );
         HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
         void deleteTaskCall(HSimVlogTaskCall *p );
@@ -52,7 +51,6 @@ public:
     cu0 u0;
     class cu1 : public HSimVlogTask{
     public: 
-        HSim__s3 uv[1];
         cu1(workMcpu__tbw* arch );
         HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
         void deleteTaskCall(HSimVlogTaskCall *p );
@@ -68,7 +66,6 @@ public:
     cu1 u1;
     class cu2 : public HSimVlogTask{
     public: 
-        HSim__s3 uv[1];
         cu2(workMcpu__tbw* arch );
         HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
         void deleteTaskCall(HSimVlogTaskCall *p );
@@ -84,7 +81,6 @@ public:
     cu2 u2;
     class cu3 : public HSimVlogTask{
     public: 
-        HSim__s3 uv[1];
         cu3(workMcpu__tbw* arch );
         HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
         void deleteTaskCall(HSimVlogTaskCall *p );
@@ -100,7 +96,6 @@ public:
     cu3 u3;
     class cu4 : public HSimVlogTask{
     public: 
-        HSim__s3 uv[1];
         cu4(workMcpu__tbw* arch );
         HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
         void deleteTaskCall(HSimVlogTaskCall *p );
@@ -116,7 +111,6 @@ public:
     cu4 u4;
     class cu5 : public HSimVlogTask{
     public: 
-        HSim__s3 uv[1];
         cu5(workMcpu__tbw* arch );
         HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
         void deleteTaskCall(HSimVlogTaskCall *p );
@@ -132,7 +126,6 @@ public:
     cu5 u5;
     class cu6 : public HSimVlogTask{
     public: 
-        HSim__s3 uv[1];
         cu6(workMcpu__tbw* arch );
         HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
         void deleteTaskCall(HSimVlogTaskCall *p );
@@ -146,7 +139,82 @@ public:
         bool disable(HSim__s7* proc);
     };
     cu6 u6;
-    HSim__s1 us[8];
+    class cu7 : public HSimVlogTask{
+    public: 
+        cu7(workMcpu__tbw* arch );
+        HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
+        void deleteTaskCall(HSimVlogTaskCall *p );
+        void reset();
+        void constructObject();
+        int getSizeForArg(int argNumber);
+        workMcpu__tbw* Arch ;
+        HSimVector<HSimRegion *> activeInstanceList ;
+        HSimVector<HSimRegion *>  availableTaskCallObjList ;
+        ~cu7();
+        bool disable(HSim__s7* proc);
+    };
+    cu7 u7;
+    class cu8 : public HSimVlogTask{
+    public: 
+        cu8(workMcpu__tbw* arch );
+        HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
+        void deleteTaskCall(HSimVlogTaskCall *p );
+        void reset();
+        void constructObject();
+        int getSizeForArg(int argNumber);
+        workMcpu__tbw* Arch ;
+        HSimVector<HSimRegion *> activeInstanceList ;
+        HSimVector<HSimRegion *>  availableTaskCallObjList ;
+        ~cu8();
+        bool disable(HSim__s7* proc);
+    };
+    cu8 u8;
+    class cu9 : public HSimVlogTask{
+    public: 
+        cu9(workMcpu__tbw* arch );
+        HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
+        void deleteTaskCall(HSimVlogTaskCall *p );
+        void reset();
+        void constructObject();
+        int getSizeForArg(int argNumber);
+        workMcpu__tbw* Arch ;
+        HSimVector<HSimRegion *> activeInstanceList ;
+        HSimVector<HSimRegion *>  availableTaskCallObjList ;
+        ~cu9();
+        bool disable(HSim__s7* proc);
+    };
+    cu9 u9;
+    class cu10 : public HSimVlogTask{
+    public: 
+        cu10(workMcpu__tbw* arch );
+        HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
+        void deleteTaskCall(HSimVlogTaskCall *p );
+        void reset();
+        void constructObject();
+        int getSizeForArg(int argNumber);
+        workMcpu__tbw* Arch ;
+        HSimVector<HSimRegion *> activeInstanceList ;
+        HSimVector<HSimRegion *>  availableTaskCallObjList ;
+        ~cu10();
+        bool disable(HSim__s7* proc);
+    };
+    cu10 u10;
+    class cu11 : public HSimVlogTask{
+    public: 
+        cu11(workMcpu__tbw* arch );
+        HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
+        void deleteTaskCall(HSimVlogTaskCall *p );
+        void reset();
+        void constructObject();
+        int getSizeForArg(int argNumber);
+        workMcpu__tbw* Arch ;
+        HSimVector<HSimRegion *> activeInstanceList ;
+        HSimVector<HSimRegion *>  availableTaskCallObjList ;
+        ~cu11();
+        bool disable(HSim__s7* proc);
+    };
+    cu11 u11;
+    HSim__s1 us[13];
     HSim__s3 uv[6];
     HSimVlogParam up[3];
 };

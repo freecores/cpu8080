@@ -1,56 +1,52 @@
  command line:
-   ./cpu_tbw_isim_beh.exe
+   ./cpu8080_tbw_isim_beh.exe
      -intstyle  ise
      -ipchost  localhost
-     -ipcport  1535
+     -ipcport  1572
 
-Fri Oct 20 22:37:54 2006
+Tue Oct 31 23:18:27 2006
 
-Total Line Count = 1281
+Total Line Count = 3778
 
- Elaboration time 0 sec.
+ Elaboration time 0.03125 sec.
 
- Estimate current memory usage 34.6849 Meg. 
+ Estimate current memory usage 36.3848 Meg. 
 
- Total signals 146
- Total nets 128
- Total signal drivers 61
- Total blocks 20
- Total primitive blocks 16
- Total processes 80
-ntrace select -o on -n /cpu_tbw/readio 
-ntrace select -o on -n /cpu_tbw/writemem 
-ntrace select -o on -n /cpu_tbw/writeio 
-ntrace select -o on -n /cpu_tbw/inta 
-ntrace select -o on -n /cpu_tbw/readmem 
-ntrace select -o on -n /cpu_tbw/clock 
-ntrace select -o on -n /cpu_tbw/waitr 
-ntrace select -o on -n /cpu_tbw/reset 
-ntrace select -o on -n /cpu_tbw/intr 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/addr 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/data 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/state 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/pc 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/carry 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/zero 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/parity 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/sign 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/auxcar 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/ei 
-ntrace select -o on -n /cpu_tbw/UUT/cpu/sp 
-ntrace select -o on -n /cpu_tbw/UUT/ramsel 
-ntrace select -o on -n /cpu_tbw/UUT/romsel 
-ntrace select -o on -n /cpu_tbw/UUT/bootstrap 
-ntrace select -o on -n /cpu_tbw/UUT/intsel 
-ntrace select -o on -n /cpu_tbw/UUT/intc/activep 
-ntrace select -o on -n /cpu_tbw/UUT/intc/active 
-ntrace select -o on -n /cpu_tbw/UUT/intc/edges 
-ntrace select -o on -n /cpu_tbw/UUT/intc/polarity 
-ntrace select -o on -n /cpu_tbw/UUT/intc/intr 
+ Total signals 274
+ Total nets 428
+ Total signal drivers 132
+ Total blocks 35
+ Total primitive blocks 24
+ Total processes 140
+ntrace select -o on -n /cpu8080_tbw/clock 
+ntrace select -o on -n /cpu8080_tbw/writemem 
+ntrace select -o on -n /cpu8080_tbw/readmem 
+ntrace select -o on -n /cpu8080_tbw/readio 
+ntrace select -o on -n /cpu8080_tbw/writeio 
+ntrace select -o on -n /cpu8080_tbw/data 
+ntrace select -o on -n /cpu8080_tbw/addr 
+ntrace select -o on -n /cpu8080_tbw/waitr 
+ntrace select -o on -n /cpu8080_tbw/intr 
+ntrace select -o on -n /cpu8080_tbw/inta 
+ntrace select -o on -n /cpu8080_tbw/vsync_n 
+ntrace select -o on -n /cpu8080_tbw/hsync_n 
+ntrace select -o on -n /cpu8080_tbw/b 
+ntrace select -o on -n /cpu8080_tbw/g 
+ntrace select -o on -n /cpu8080_tbw/r 
+ntrace select -o on -n /cpu8080_tbw/UUT/reset 
+ntrace select -o on -n /cpu8080_tbw/UUT/clocki 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmdata 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmwrite 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmaddr 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmdatai 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmdatae 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/state 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/outrdy 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/pixeldata 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/lincnt 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/rowcnt 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/chrcnt 
 ntrace start 
 run all 
 Simulator is doing circuit initialization process.
 Finished circuit initialization process.
-run 10000 ns 
-run 10000 ns 
-run 10000 ns 

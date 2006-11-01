@@ -79,34 +79,35 @@
 `define cpus_idle     5'h00 // Idle
 `define cpus_fetchi   5'h01 // Instruction fetch
 `define cpus_fetchi2  5'h02 // Instruction fetch 2
-`define cpus_halt     5'h03 // Halt (wait for interrupt)
-`define cpus_alucb    5'h04 // alu cycleback
-`define cpus_indcb    5'h05 // inr/dcr cycleback
-`define cpus_movmtbc  5'h06 // Move memory to bc
-`define cpus_movmtde  5'h07 // Move memory to de
-`define cpus_movmthl  5'h08 // Move memory to hl
-`define cpus_movmtsp  5'h09 // Move memory to sp
-`define cpus_lhld     5'h0a // LHLD
-`define cpus_jmp      5'h0b // JMP
-`define cpus_write    5'h0c // write byte
-`define cpus_write2   5'h0d // write byte #2
-`define cpus_write3   5'h0e // write byte #3
-`define cpus_write4   5'h0f // write byte #4
-`define cpus_read     5'h10 // read byte
-`define cpus_read2    5'h11 // read byte #2
-`define cpus_pop      5'h12 // POP completion
-`define cpus_in       5'h13 // IN
-`define cpus_in2      5'h14 // IN #2
-`define cpus_out      5'h15 // OUT
-`define cpus_out2     5'h16 // OUT #2
-`define cpus_out3     5'h17 // OUT #3
-`define cpus_out4     5'h18 // OUT #4
-`define cpus_movtr    5'h19 // move to register
-`define cpus_movrtw   5'h1a // move read to write
-`define cpus_movrtwa  5'h1b // move read to write address
-`define cpus_movrtra  5'h1c // move read to read address
-`define cpus_accimm   5'h1d // accumulator immediate operations
-`define cpus_daa      5'h1e // DAA completion
+`define cpus_fetchi3  5'h03 // Instruction fetch 3
+`define cpus_halt     5'h04 // Halt (wait for interrupt)
+`define cpus_alucb    5'h05 // alu cycleback
+`define cpus_indcb    5'h06 // inr/dcr cycleback
+`define cpus_movmtbc  5'h07 // Move memory to bc
+`define cpus_movmtde  5'h08 // Move memory to de
+`define cpus_movmthl  5'h09 // Move memory to hl
+`define cpus_movmtsp  5'h0a // Move memory to sp
+`define cpus_lhld     5'h0b // LHLD
+`define cpus_jmp      5'h0c // JMP
+`define cpus_write    5'h0d // write byte
+`define cpus_write2   5'h0e // write byte #2
+`define cpus_write3   5'h0f // write byte #3
+`define cpus_write4   5'h10 // write byte #4
+`define cpus_read     5'h11 // read byte
+`define cpus_read2    5'h12 // read byte #2
+`define cpus_pop      5'h13 // POP completion
+`define cpus_in       5'h14 // IN
+`define cpus_in2      5'h15 // IN #2
+`define cpus_out      5'h16 // OUT
+`define cpus_out2     5'h17 // OUT #2
+`define cpus_out3     5'h18 // OUT #3
+`define cpus_out4     5'h19 // OUT #4
+`define cpus_movtr    5'h1a // move to register
+`define cpus_movrtw   5'h1b // move read to write
+`define cpus_movrtwa  5'h1c // move read to write address
+`define cpus_movrtra  5'h1d // move read to read address
+`define cpus_accimm   5'h1e // accumulator immediate operations
+`define cpus_daa      5'h1f // DAA completion
 
 //
 // Register numbers
@@ -210,6 +211,7 @@ module cpu8080(addr,     // Address out
    reg    [5:0]  statesel;    // state map selector
    reg    [4:0]  nextstate;   // next state output
    reg           eienb;       // interrupt enable delay shift reg
+   reg    [7:0]  opcode;      // opcode holding
    
    // Register file. Note that 3'b110 (6) is not used, and is the code for a
    // memory reference.
@@ -281,20 +283,26 @@ module cpu8080(addr,     // Address out
          state <= `cpus_fetchi2; // next state
        
       end
-       
+
       `cpus_fetchi2: begin // complete instruction memory read
-       
+
+         opcode <= data; // latch opcode
          readmem <= 0; // Deactivate instruction memory read
          inta <= 0; // and interrupt acknowledge
+         state <= `cpus_fetchi3; // next state
+         
+      end
+       
+      `cpus_fetchi3: begin // complete instruction memory read
           
          // We split off the instructions into 4 groups. Most of the 8080
          // instructions are in the MOV and ACC operations class.
           
-         case (data[7:6]) // Decode top level
+         case (opcode[7:6]) // Decode top level
           
             2'b00: begin // 00: Data transfers and others
              
-               case (data[5:0]) // decode these instructions
+               case (opcode[5:0]) // decode these instructions
 
                   6'b000000: begin // NOP
 
@@ -350,10 +358,10 @@ module cpu8080(addr,     // Address out
                   6'b010101, 6'b011101, 6'b100101, 6'b101101, 6'b110101, 
                   6'b111101: begin // INR/DCR
 
-                     regd <= data[5:3]; // get source/destination reg
-                     aluopra <= regfil[data[5:3]]; // load as alu a
+                     regd <= opcode[5:3]; // get source/destination reg
+                     aluopra <= regfil[opcode[5:3]]; // load as alu a
                      aluoprb <= 1; // load 1 as alu b
-                     if (data[0]) alusel <= `aluop_sub; // set subtract
+                     if (opcode[0]) alusel <= `aluop_sub; // set subtract
                      else alusel <= `aluop_add; // set add
                      state <= `cpus_indcb; // go inr/dcr cycleback
                      pc <= pc+1; // Next instruction byte
@@ -363,7 +371,7 @@ module cpu8080(addr,     // Address out
                   6'b000010, 6'b010010: begin // STAX
 
                      wdatahold <= regfil[`reg_a]; // place A as source
-                     if (data[4]) // use DE pair
+                     if (opcode[4]) // use DE pair
                         waddrhold <= regfil[`reg_d]<<8|regfil[`reg_d];
                      else // use BC pair
                         waddrhold <= regfil[`reg_b] << 8|regfil[`reg_c];
@@ -376,7 +384,7 @@ module cpu8080(addr,     // Address out
                   6'b001010, 6'b011010: begin // LDAX
 
                      regd <= `reg_a; // set A as destination
-                     if (data[4]) // use DE pair
+                     if (opcode[4]) // use DE pair
                         raddrhold <= regfil[`reg_d]<<8|regfil[`reg_d];
                      else // use BC pair
                         raddrhold <= regfil[`reg_b]<<8|regfil[`reg_c];
@@ -600,11 +608,11 @@ module cpu8080(addr,     // Address out
                   6'b101110, 6'b110110, 6'b111110: begin // MVI
 
                      // move immediate to register
-                     regd <= data[5:3]; // set destination register
+                     regd <= opcode[5:3]; // set destination register
                      raddrhold <= pc+1; // set pickup address
-                     if (data[5:3] == `reg_m) begin // it's mvi m,imm
+                     if (opcode[5:3] == `reg_m) begin // it's mvi m,imm
 
-                        regd <= data[5:3]; // set destination register
+                        regd <= opcode[5:3]; // set destination register
                         // set destination address
                         waddrhold <= { regfil[`reg_h], regfil[`reg_l] };
                         statesel <= `mac_readbmtw; // read byte and move to write
@@ -674,18 +682,18 @@ module cpu8080(addr,     // Address out
              
                // Check its the halt instruction, which occupies the invalid
                // "MOV M,M" instruction.
-               if (data == 8'b01110110) state <= `cpus_halt;
+               if (opcode == 8'b01110110) state <= `cpus_halt;
                // Otherwise, the 01 prefix is single instruction format.
                else begin
 
                   // Format 01DDDSSS
    
                   // Check memory source, use state if so
-                  if (data[2:0] == `reg_m) begin
+                  if (opcode[2:0] == `reg_m) begin
 
                      // place hl as address
                      raddrhold <= regfil[`reg_h]<<8|regfil[`reg_l];
-                     regd <= data[5:3]; // set destination
+                     regd <= opcode[5:3]; // set destination
                      statesel <= `mac_readbtoreg; // read byte to register
                      state <= `cpus_read;
 
@@ -694,14 +702,14 @@ module cpu8080(addr,     // Address out
 
                      // place hl as address
                      waddrhold <= regfil[`reg_h]<<8|regfil[`reg_l];
-                     wdatahold <= regfil[data[2:0]]; // place data to write
+                     wdatahold <= regfil[opcode[2:0]]; // place data to write
                      statesel <= `mac_writebyte; // write byte
                      state <= `cpus_write;
 
                   // otherwise simple register to register
                   end else begin
 
-                     regfil[data[5:3]] <= regfil[data[2:0]];
+                     regfil[opcode[5:3]] <= regfil[opcode[2:0]];
                      state <= `cpus_fetchi; // Fetch next instruction
 
                   end
@@ -715,10 +723,10 @@ module cpu8080(addr,     // Address out
              
                // 10 prefix is single instruction format
                aluopra <= regfil[`reg_a]; // load as alu a
-               aluoprb <= regfil[data[2:0]]; // load as alu b
-               alusel <= data[5:3]; // set alu operation from instruction
+               aluoprb <= regfil[opcode[2:0]]; // load as alu b
+               alusel <= opcode[5:3]; // set alu operation from instruction
                alucin <= carry; // input carry
-               if (data[2:0] == `reg_m) begin
+               if (opcode[2:0] == `reg_m) begin
 
                   // set read address
                   raddrhold <= regfil[`reg_h]<<8|regfil[`reg_l];
@@ -734,13 +742,13 @@ module cpu8080(addr,     // Address out
              
             2'b11: begin // 11: jmp/call and others
              
-               case (data[5:0]) // decode these instructions
+               case (opcode[5:0]) // decode these instructions
 
                   6'b000101, 6'b010101, 6'b100101, 6'b110101: begin // PUSH
 
                      waddrhold <= sp-2; // write to stack
                      sp <= sp-2; // pushdown stack
-                     case (data[5:4]) // register set
+                     case (opcode[5:4]) // register set
 
                         2'b00: { wdatahold2, wdatahold } <= 
                                   { regfil[`reg_b], regfil[`reg_c] };
@@ -750,7 +758,7 @@ module cpu8080(addr,     // Address out
                                   { regfil[`reg_h], regfil[`reg_l] };
                         2'b11: { wdatahold2, wdatahold } <= 
                                   { regfil[`reg_a], sign, zero, 1'b0, auxcar, 
-                                    1'b0, parity, carry };
+                                    1'b0, parity, 1'b1, carry };
 
                      endcase
                      statesel <= `mac_writedbyte; // write double byte
@@ -761,7 +769,7 @@ module cpu8080(addr,     // Address out
 
                   6'b000001, 6'b010001, 6'b100001, 6'b110001: begin // POP
 
-                     popdes <= data[5:4]; // set destination
+                     popdes <= opcode[5:4]; // set destination
                      raddrhold <= sp; // read from stack
                      sp <= sp+2; // pushup stack
                      statesel <= `mac_pop; // perform POP
@@ -806,7 +814,7 @@ module cpu8080(addr,     // Address out
                   6'b111110: begin // immediate arithmetic to accumulator
 
                      aluopra <= regfil[`reg_a]; // load as alu a
-                     alusel <= data[5:3]; // set alu operation from instruction
+                     alusel <= opcode[5:3]; // set alu operation from instruction
                      alucin <= carry; // input carry
                      raddrhold <= pc+1; // read at PC
                      statesel <= `mac_accimm; // finish accumulator immediate
@@ -836,7 +844,7 @@ module cpu8080(addr,     // Address out
                      raddrhold <= pc+1; // pick up jump address
                      statesel <= `mac_jmp; // finish JMP
                      // choose continue or read according to condition
-                     case (data[5:3]) // decode flag cases
+                     case (opcode[5:3]) // decode flag cases
 
                         3'b000: if (zero) state <= `cpus_fetchi;
                                 else state <= `cpus_read;
@@ -883,7 +891,7 @@ module cpu8080(addr,     // Address out
                      sp <= sp-2; // pushdown stack
                      statesel <= `mac_call; // finish CALL
                      // choose continue or read according to condition
-                     case (data[5:3]) // decode flag cases
+                     case (opcode[5:3]) // decode flag cases
 
                         3'b000: if (zero) state <= `cpus_fetchi; 
                                 else state <= `cpus_read;
@@ -923,7 +931,7 @@ module cpu8080(addr,     // Address out
                      sp <= sp+2; // pushup stack
                      statesel <= `mac_jmp; // finish JMP
                      // choose read or continue according to condition
-                     case (data[5:3]) // decode flag cases
+                     case (opcode[5:3]) // decode flag cases
 
                         3'b000: if (zero) state <= `cpus_fetchi; 
                                 else state <= `cpus_read;
@@ -950,7 +958,7 @@ module cpu8080(addr,     // Address out
                   6'b000111, 6'b001111, 6'b010111, 6'b011111, 6'b100111, 
                   6'b101111, 6'b110111, 6'b111111: begin // RST
 
-                     pc <= data & 8'b00111000; // place restart value in PC
+                     pc <= opcode & 8'b00111000; // place restart value in PC
                      waddrhold <= sp-2; // place address on stack
                      // if interrupt cycle, use current pc, else use address
                      // after call
@@ -965,7 +973,7 @@ module cpu8080(addr,     // Address out
 
                   6'b111011: begin // EI
 
-                     ei <= 1'b1;
+                     eienb <= 1'b1; // set delayed interrupt enable
                      state <= `cpus_fetchi; // Fetch next instruction
                      pc <= pc+1; // Next instruction byte
 

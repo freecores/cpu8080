@@ -8,7 +8,7 @@
 // \   \   \/     Version : 8.2.02i
 //  \   \         Application : ISE
 //  /   /         Filename : cpu_tbw.ant
-// /___/   /\     Timestamp : Fri Oct 20 21:19:57 2006
+// /___/   /\     Timestamp : Sat Oct 28 09:12:59 2006
 // \   \  /  \ 
 //  \___\/\___\ 
 //
@@ -20,7 +20,7 @@
 
 module cpu_tbw;
     wire [15:0] addr;
-    reg [7:0] data$inout$reg = 8'bZZZZZZZZ;
+    reg [7:0] data$inout$reg = 8'bZ1Z00000;
     wire [7:0] data = data$inout$reg;
     wire readmem;
     wire writemem;
@@ -29,7 +29,12 @@ module cpu_tbw;
     wire intr;
     wire inta;
     reg waitr = 1'b0;
-    reg reset = 1'b1;
+    wire [2:0] r;
+    wire [2:0] g;
+    wire [2:0] b;
+    wire hsync_n;
+    wire vsync_n;
+    reg reset = 1'b0;
     reg clock = 1'b0;
 
     parameter PERIOD = 200;
@@ -57,6 +62,11 @@ module cpu_tbw;
         .intr(intr),
         .inta(inta),
         .waitr(waitr),
+        .r(r),
+        .g(g),
+        .b(b),
+        .hsync_n(hsync_n),
+        .vsync_n(vsync_n),
         .reset(reset),
         .clock(clock));
 
@@ -72,6 +82,11 @@ module cpu_tbw;
         ANNOTATE_writeio;
         ANNOTATE_intr;
         ANNOTATE_inta;
+        ANNOTATE_r;
+        ANNOTATE_g;
+        ANNOTATE_b;
+        ANNOTATE_hsync_n;
+        ANNOTATE_vsync_n;
         #OFFSET;
         forever begin
             #115;
@@ -82,13 +97,18 @@ module cpu_tbw;
             ANNOTATE_writeio;
             ANNOTATE_intr;
             ANNOTATE_inta;
+            ANNOTATE_r;
+            ANNOTATE_g;
+            ANNOTATE_b;
+            ANNOTATE_hsync_n;
+            ANNOTATE_vsync_n;
             #85;
         end
     end
 
     initial begin  // Open the annotations file...
         TX_FILE = $fopen("C:\\Xilinx\\ISEexamples\\cpu8080\\cpu_tbw.ano");
-        #10200 // Final time:  10200 ns
+        #100200 // Final time:  100200 ns
         $display("Success! Annotation Simulation Complete.");
         $fdisplay(TX_FILE, "Total[%d]", TX_ERROR);
         $fclose(TX_FILE);
@@ -96,8 +116,9 @@ module cpu_tbw;
     end
 
     initial begin
-        // -------------  Current Time:  485ns
-        #485;
+        // -------------  Current Time:  85ns
+        #85;
+        reset = 1'b1;
         reset = 1'b0;
         // -------------------------------------
     end
@@ -153,6 +174,46 @@ module cpu_tbw;
     task ANNOTATE_inta;
         #0 begin
             $fdisplay(TX_FILE, "Annotate[%d,inta,%b]", $time, inta);
+            $fflush(TX_FILE);
+            TX_ERROR = TX_ERROR + 1;
+        end
+    endtask
+
+    task ANNOTATE_r;
+        #0 begin
+            $fdisplay(TX_FILE, "Annotate[%d,r,%b]", $time, r);
+            $fflush(TX_FILE);
+            TX_ERROR = TX_ERROR + 1;
+        end
+    endtask
+
+    task ANNOTATE_g;
+        #0 begin
+            $fdisplay(TX_FILE, "Annotate[%d,g,%b]", $time, g);
+            $fflush(TX_FILE);
+            TX_ERROR = TX_ERROR + 1;
+        end
+    endtask
+
+    task ANNOTATE_b;
+        #0 begin
+            $fdisplay(TX_FILE, "Annotate[%d,b,%b]", $time, b);
+            $fflush(TX_FILE);
+            TX_ERROR = TX_ERROR + 1;
+        end
+    endtask
+
+    task ANNOTATE_hsync_n;
+        #0 begin
+            $fdisplay(TX_FILE, "Annotate[%d,hsync_n,%b]", $time, hsync_n);
+            $fflush(TX_FILE);
+            TX_ERROR = TX_ERROR + 1;
+        end
+    endtask
+
+    task ANNOTATE_vsync_n;
+        #0 begin
+            $fdisplay(TX_FILE, "Annotate[%d,vsync_n,%b]", $time, vsync_n);
             $fflush(TX_FILE);
             TX_ERROR = TX_ERROR + 1;
         end

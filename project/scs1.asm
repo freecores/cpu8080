@@ -2,18 +2,21 @@
 !                                                                              !
 !                  IMSAI SCS-1 MONITOR/ASSEMBLER FOR 8080 CPU                  !
 !                                                                              !
-! This copy was converted to IP assembler.                                     !
+! This copy was converted to IP assembler, and is modified to run on the       !
+! MITS serial I/O board, which had jumper selectable baud rates only.          !
 !                                                                              !
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !
 !       page    62
 !       title           'imsai scs-1 rev. 2 06 oct. 1976'
 !
-tts:    equ     $03
-tti:    equ     $02
-tto:    equ     $02
-ttyda:  equ     $02
-ttytr:  equ     $01
+! MITS serial I/O board equates
+!
+tts:    equ     $20
+tti:    equ     $21
+tto:    equ     $21
+ttyda:  equ     $01
+ttytr:  equ     $80
 !
         jmp     inita           ! dead start
         jmp     eor             ! restart monitor
@@ -23,20 +26,10 @@ ttytr:  equ     $01
 !
         alignp  $40
 !
-! this routine sets up the sio board
-!
-inita:  mvi     a,$aa           ! get dummy mode word
-        out     tts             ! output it
-        mvi     a,$40           ! get reset bit
-        out     tts             ! reset sio board
-        mvi     a,$ce           ! get real mode word
-        out     tts             ! set the mode for real
-        mvi     a,$37           ! get the command
-        out     tts             ! output it
-!
 ! this routine initializes the file aread for subsequent
 ! processing
 !
+inita:  
         lxi     h,file0
         mvi     c,maxfil*felen
         xra     a
@@ -140,7 +133,6 @@ cler:   cmp     l
 ! see if tty input ready and check for ctrl x.
 !
 ink:    in      tts             ! get tty status
-        cma                     ! invert status
         ani     ttyda           ! is data available?
         rnz                     ! return if not
         in      tti             ! get the char
@@ -151,6 +143,7 @@ ink:    in      tts             ! get tty status
 ! this routine reads a byte of data from the usart
 !
 in8:    in      tts             ! read usart status
+        cma                     ! invert status
         ani     ttyda
         jz      in8
         in      tti             ! read data
@@ -162,6 +155,7 @@ in8:    in      tts             ! read usart status
 ! this routine outputs a byte of data to the usart
 !
 out8:   in      tts             ! read status
+        cma                     ! invert status
         ani     ttytr
         jz      out8
 ok:     mov     a,b
@@ -2307,4 +2301,4 @@ obuf:   defvs    16
         defvs    5
 ibuf:   defvs    83
 swch:   equ     $ff
-symt:   equ     _
+symt:   defvs

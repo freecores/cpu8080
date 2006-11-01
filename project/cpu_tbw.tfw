@@ -8,7 +8,7 @@
 // \   \   \/     Version : 8.2.02i
 //  \   \         Application : ISE
 //  /   /         Filename : cpu_tbw.tfw
-// /___/   /\     Timestamp : Fri Oct 20 21:19:57 2006
+// /___/   /\     Timestamp : Sat Oct 28 09:12:59 2006
 // \   \  /  \ 
 //  \___\/\___\ 
 //
@@ -20,7 +20,7 @@
 
 module cpu_tbw;
     wire [15:0] addr;
-    reg [7:0] data$inout$reg = 8'bZZZZZZZZ;
+    reg [7:0] data$inout$reg = 8'bZ1Z00000;
     wire [7:0] data = data$inout$reg;
     wire readmem;
     wire writemem;
@@ -29,7 +29,12 @@ module cpu_tbw;
     wire intr;
     wire inta;
     reg waitr = 1'b0;
-    reg reset = 1'b1;
+    wire [2:0] r;
+    wire [2:0] g;
+    wire [2:0] b;
+    wire hsync_n;
+    wire vsync_n;
+    reg reset = 1'b0;
     reg clock = 1'b0;
 
     parameter PERIOD = 200;
@@ -57,300 +62,158 @@ module cpu_tbw;
         .intr(intr),
         .inta(inta),
         .waitr(waitr),
+        .r(r),
+        .g(g),
+        .b(b),
+        .hsync_n(hsync_n),
+        .vsync_n(vsync_n),
         .reset(reset),
         .clock(clock));
 
-    integer TX_FILE = 0;
-    integer TX_ERROR = 0;
-    
-    initial begin  // Open the results file...
-        TX_FILE = $fopen("results.txt");
-        #10200 // Final time:  10200 ns
-        if (TX_ERROR == 0) begin
-            $display("No errors or warnings.");
-            $fdisplay(TX_FILE, "No errors or warnings.");
-        end else begin
-            $display("%d errors found in simulation.", TX_ERROR);
-            $fdisplay(TX_FILE, "%d errors found in simulation.", TX_ERROR);
-        end
-        $fclose(TX_FILE);
-        $stop;
-    end
+        integer TX_ERROR = 0;
+        
+        initial begin  // Open the results file...
+            #100200 // Final time:  100200 ns
+            if (TX_ERROR == 0) begin
+                $display("No errors or warnings.");
+                end else begin
+                    $display("%d errors found in simulation.", TX_ERROR);
+                    end
+                    $stop;
+                end
 
-    initial begin
-        // -------------  Current Time:  115ns
-        #115;
-        CHECK_intr(1'bZ);
-        CHECK_readmem(1'b0);
-        CHECK_writeio(1'b0);
-        CHECK_writemem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  485ns
-        #370;
-        reset = 1'b0;
-        // -------------------------------------
-        // -------------  Current Time:  515ns
-        #30;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000000000);
-        // -------------------------------------
-        // -------------  Current Time:  715ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  915ns
-        #200;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000000001);
-        // -------------------------------------
-        // -------------  Current Time:  1115ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  1515ns
-        #400;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000000010);
-        // -------------------------------------
-        // -------------  Current Time:  1715ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  1915ns
-        #200;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000000011);
-        // -------------------------------------
-        // -------------  Current Time:  2115ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  2515ns
-        #400;
-        CHECK_writeio(1'b1);
-        // -------------------------------------
-        // -------------  Current Time:  2715ns
-        #200;
-        CHECK_writeio(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  3115ns
-        #400;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000000100);
-        // -------------------------------------
-        // -------------  Current Time:  3315ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  3515ns
-        #200;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000000101);
-        // -------------------------------------
-        // -------------  Current Time:  3715ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  4115ns
-        #400;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000000110);
-        // -------------------------------------
-        // -------------  Current Time:  4315ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  4515ns
-        #200;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000000111);
-        // -------------------------------------
-        // -------------  Current Time:  4715ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  4915ns
-        #200;
-        CHECK_addr(16'b0000000000000010);
-        // -------------------------------------
-        // -------------  Current Time:  5115ns
-        #200;
-        CHECK_writeio(1'b1);
-        // -------------------------------------
-        // -------------  Current Time:  5315ns
-        #200;
-        CHECK_writeio(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  5715ns
-        #400;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000001000);
-        // -------------------------------------
-        // -------------  Current Time:  5915ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  6115ns
-        #200;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000001001);
-        // -------------------------------------
-        // -------------  Current Time:  6315ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  6715ns
-        #400;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000001010);
-        // -------------------------------------
-        // -------------  Current Time:  6915ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  7115ns
-        #200;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000001011);
-        // -------------------------------------
-        // -------------  Current Time:  7315ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  7515ns
-        #200;
-        CHECK_addr(16'b0000000000000101);
-        // -------------------------------------
-        // -------------  Current Time:  7715ns
-        #200;
-        CHECK_writeio(1'b1);
-        // -------------------------------------
-        // -------------  Current Time:  7915ns
-        #200;
-        CHECK_writeio(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  8315ns
-        #400;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000001100);
-        // -------------------------------------
-        // -------------  Current Time:  8515ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  8715ns
-        #200;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000001101);
-        // -------------------------------------
-        // -------------  Current Time:  8915ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  9315ns
-        #400;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000001110);
-        // -------------------------------------
-        // -------------  Current Time:  9515ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-        // -------------  Current Time:  9715ns
-        #200;
-        CHECK_readmem(1'b1);
-        CHECK_addr(16'b0000000000001111);
-        // -------------------------------------
-        // -------------  Current Time:  9915ns
-        #200;
-        CHECK_readmem(1'b0);
-        // -------------------------------------
-    end
+                initial begin
+                    // -------------  Current Time:  85ns
+                    #85;
+                    reset = 1'b1;
+                    data$inout$reg = 8'bZZZZZZZZ;
+                    // -------------------------------------
+                    // -------------  Current Time:  485ns
+                    #400;
+                    reset = 1'b0;
+                    // -------------------------------------
+                end
 
-    task CHECK_addr;
-        input [15:0] NEXT_addr;
+                task CHECK_addr;
+                    input [15:0] NEXT_addr;
 
-        #0 begin
-            if (NEXT_addr !== addr) begin
-                $display("Error at time=%dns addr=%b, expected=%b", $time, addr, NEXT_addr);
-                $fdisplay(TX_FILE, "Error at time=%dns addr=%b, expected=%b", $time, addr, NEXT_addr);
-                $fflush(TX_FILE);
-                TX_ERROR = TX_ERROR + 1;
-            end
-        end
-    endtask
-    task CHECK_readmem;
-        input NEXT_readmem;
+                    #0 begin
+                        if (NEXT_addr !== addr) begin
+                            $display("Error at time=%dns addr=%b, expected=%b", $time, addr, NEXT_addr);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_readmem;
+                    input NEXT_readmem;
 
-        #0 begin
-            if (NEXT_readmem !== readmem) begin
-                $display("Error at time=%dns readmem=%b, expected=%b", $time, readmem, NEXT_readmem);
-                $fdisplay(TX_FILE, "Error at time=%dns readmem=%b, expected=%b", $time, readmem, NEXT_readmem);
-                $fflush(TX_FILE);
-                TX_ERROR = TX_ERROR + 1;
-            end
-        end
-    endtask
-    task CHECK_writemem;
-        input NEXT_writemem;
+                    #0 begin
+                        if (NEXT_readmem !== readmem) begin
+                            $display("Error at time=%dns readmem=%b, expected=%b", $time, readmem, NEXT_readmem);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_writemem;
+                    input NEXT_writemem;
 
-        #0 begin
-            if (NEXT_writemem !== writemem) begin
-                $display("Error at time=%dns writemem=%b, expected=%b", $time, writemem, NEXT_writemem);
-                $fdisplay(TX_FILE, "Error at time=%dns writemem=%b, expected=%b", $time, writemem, NEXT_writemem);
-                $fflush(TX_FILE);
-                TX_ERROR = TX_ERROR + 1;
-            end
-        end
-    endtask
-    task CHECK_readio;
-        input NEXT_readio;
+                    #0 begin
+                        if (NEXT_writemem !== writemem) begin
+                            $display("Error at time=%dns writemem=%b, expected=%b", $time, writemem, NEXT_writemem);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_readio;
+                    input NEXT_readio;
 
-        #0 begin
-            if (NEXT_readio !== readio) begin
-                $display("Error at time=%dns readio=%b, expected=%b", $time, readio, NEXT_readio);
-                $fdisplay(TX_FILE, "Error at time=%dns readio=%b, expected=%b", $time, readio, NEXT_readio);
-                $fflush(TX_FILE);
-                TX_ERROR = TX_ERROR + 1;
-            end
-        end
-    endtask
-    task CHECK_writeio;
-        input NEXT_writeio;
+                    #0 begin
+                        if (NEXT_readio !== readio) begin
+                            $display("Error at time=%dns readio=%b, expected=%b", $time, readio, NEXT_readio);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_writeio;
+                    input NEXT_writeio;
 
-        #0 begin
-            if (NEXT_writeio !== writeio) begin
-                $display("Error at time=%dns writeio=%b, expected=%b", $time, writeio, NEXT_writeio);
-                $fdisplay(TX_FILE, "Error at time=%dns writeio=%b, expected=%b", $time, writeio, NEXT_writeio);
-                $fflush(TX_FILE);
-                TX_ERROR = TX_ERROR + 1;
-            end
-        end
-    endtask
-    task CHECK_intr;
-        input NEXT_intr;
+                    #0 begin
+                        if (NEXT_writeio !== writeio) begin
+                            $display("Error at time=%dns writeio=%b, expected=%b", $time, writeio, NEXT_writeio);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_intr;
+                    input NEXT_intr;
 
-        #0 begin
-            if (NEXT_intr !== intr) begin
-                $display("Error at time=%dns intr=%b, expected=%b", $time, intr, NEXT_intr);
-                $fdisplay(TX_FILE, "Error at time=%dns intr=%b, expected=%b", $time, intr, NEXT_intr);
-                $fflush(TX_FILE);
-                TX_ERROR = TX_ERROR + 1;
-            end
-        end
-    endtask
-    task CHECK_inta;
-        input NEXT_inta;
+                    #0 begin
+                        if (NEXT_intr !== intr) begin
+                            $display("Error at time=%dns intr=%b, expected=%b", $time, intr, NEXT_intr);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_inta;
+                    input NEXT_inta;
 
-        #0 begin
-            if (NEXT_inta !== inta) begin
-                $display("Error at time=%dns inta=%b, expected=%b", $time, inta, NEXT_inta);
-                $fdisplay(TX_FILE, "Error at time=%dns inta=%b, expected=%b", $time, inta, NEXT_inta);
-                $fflush(TX_FILE);
-                TX_ERROR = TX_ERROR + 1;
-            end
-        end
-    endtask
+                    #0 begin
+                        if (NEXT_inta !== inta) begin
+                            $display("Error at time=%dns inta=%b, expected=%b", $time, inta, NEXT_inta);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_r;
+                    input [2:0] NEXT_r;
 
-endmodule
+                    #0 begin
+                        if (NEXT_r !== r) begin
+                            $display("Error at time=%dns r=%b, expected=%b", $time, r, NEXT_r);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_g;
+                    input [2:0] NEXT_g;
+
+                    #0 begin
+                        if (NEXT_g !== g) begin
+                            $display("Error at time=%dns g=%b, expected=%b", $time, g, NEXT_g);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_b;
+                    input [2:0] NEXT_b;
+
+                    #0 begin
+                        if (NEXT_b !== b) begin
+                            $display("Error at time=%dns b=%b, expected=%b", $time, b, NEXT_b);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_hsync_n;
+                    input NEXT_hsync_n;
+
+                    #0 begin
+                        if (NEXT_hsync_n !== hsync_n) begin
+                            $display("Error at time=%dns hsync_n=%b, expected=%b", $time, hsync_n, NEXT_hsync_n);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+                task CHECK_vsync_n;
+                    input NEXT_vsync_n;
+
+                    #0 begin
+                        if (NEXT_vsync_n !== vsync_n) begin
+                            $display("Error at time=%dns vsync_n=%b, expected=%b", $time, vsync_n, NEXT_vsync_n);
+                            TX_ERROR = TX_ERROR + 1;
+                        end
+                    end
+                endtask
+
+            endmodule
 

@@ -1,1904 +1,1841 @@
-;**************************************************************
-;* 
-;*                TINY BASIC FOR INTEL 8080
-;*                      VERSION 1.0
-;*                    BY LI-CHEN WANG
-;*                     10 JUNE, 1976 
-;*                       @COPYLEFT 
-;*                  ALL WRONGS RESERVED
-;* 
-;**************************************************************
-;* 
-;*  ;*** ZERO PAGE SUBROUTINES ***
-;* 
-;*  THE 8080 INSTRUCTION SET LETS YOU HAVE 8 ROUTINES IN LOW 
-;*  MEMORY THAT MAY BE CALLED BY RST N, N BEING 0 THROUGH 7. 
-;*  THIS IS A ONE BYTE INSTRUCTION AND HAS THE SAME POWER AS 
-;*  THE THREE BYTE INSTRUCTION CALL LLHH.  TINY BASIC WILL 
-;*  USE RST 0 AS START AND RST 1 THROUGH RST 7 FOR 
-;*  THE SEVEN MOST FREQUENTLY USED SUBROUTINES.
-;*  TWO OTHER SUBROUTINES (CRLF AND TSTNUM) ARE ALSO IN THIS 
-;*  SECTION.  THEY CAN BE REACHED ONLY BY 3-BYTE CALLS.
-;*  IN ORDER TO CONFIGURE THE SYSTEM FOR USE WITH CPM I HAVE
-;*  MOVED SOME OF THE ROUTINES AROUND.  START WILL NOW BE AT
-;*  LOCATION 100H AND THIS SECTION WILL END AT LOCATION 3FH
-;*  WITH A JUMP TO 108H.
-;* 
-;       ORG  8H
-;       XTHL           ;*** TSTC OR RST 1 *** 
-;       RST  5         ;IGNORE BLANKS AND 
-;       CMP  M         ;TEST CHARACTER
-;       JMP  TC1       ;REST OF THIS IS AT TC1
-;* 
-;CRLF   MVI  A,0DH     ;*** CRLF ***
-;* 
-;       PUSH PSW       ;*** OUTC OR RST 2 *** 
-;       LDA  OCSW      ;PRINT CHARACTER ONLY
-;       ORA  A         ;IFF OCSW SWITCH IS ON
-;       JMP  OC2       ;REST OF THIS IS AT OC2
-;* 
-;       CALL EXPR2     ;*** EXPR OR RST 3 *** 
-;       PUSH H         ;EVALUATE AN EXPRESION 
-;       JMP  EXPR1     ;REST OF IT IS AT EXPR1
-;       DB   'W' 
-;* 
-;       MOV  A,H       ;*** COMP OR RST 4 *** 
-;       CMP  D         ;COMPARE HL WITH DE
-;       RNZ            ;RETURN CORRECT C AND
-;       MOV  A,L       ;Z FLAGS 
-;       CMP  E         ;BUT OLD A IS LOST 
-;       RET
-;       DB   'AN'
-;* 
-;SS1    LDAX D         ;*** IGNBLK/RST 5 ***
-;       CPI  40Q       ;IGNORE BLANKS 
-;       RNZ            ;IN TEXT (WHERE DE->)
-;       INX  D         ;AND RETURN THE FIRST
-;       JMP  SS1       ;NON-BLANK CHAR. IN A
-;* 
-;       POP  PSW       ;*** FINISH/RST 6 ***
-;       CALL FIN       ;CHECK END OF COMMAND
-;       JMP  QWHAT     ;PRINT "WHAT?" IFF WRONG
-;       DB   'G' 
-;* 
-;       RST  5         ;*** TSTV OR RST 7 *** 
-;       SUI  100Q      ;TEST VARIABLES
-;       RC             ;C:NOT A VARIABLE
-;       JMP  TSTV1     ;JUMP AROUND RESERVED AREA
-       ORG  100H      ;OF CPM.
-START  JMP  NINIT      ;GO TO INITIALIZATION ROUTINE.	JIF
-TSTV1  JNZ  TV1       ;NOT "@" ARRAY 
-       INX  D         ;IT IS THE "@" ARRAY 
-       CALL PARN      ;@ SHOULD BE FOLLOWED
-       DAD  H         ;BY (EXPR) AS ITS INDEX
-       JC   QHOW      ;IS INDEX TOO BIG? 
-       PUSH D         ;WILL IT OVERWRITE 
-       XCHG           ;TEXT? 
-       CALL SIZE      ;FIND SIZE OF FREE 
-       RST  4         ;AND CHECK THAT
-       JC   ASORRY    ;IFF SO, SAY "SORRY"
-SS1A   LXI  H,VARBGN  ;IFF NOT, GET ADDRESS 
-       CALL SUBDE     ;OF @(EXPR) AND PUT IT 
-       POP  D         ;IN HL 
-       RET            ;C FLAG IS CLEARED 
-TV1    CPI  33Q       ;NOT @, IS IT A TO Z?
-       CMC            ;IFF NOT RETURN C FLAG
-       RC 
-       INX  D         ;IFF A THROUGH Z
-TV1A   LXI  H,VARBGN  ;COMPUTE ADDRESS OF
-       RLC            ;THAT VARIABLE 
-       ADD  L         ;AND RETURN IT IN HL 
-       MOV  L,A       ;WITH C FLAG CLEARED 
-       MVI  A,0 
-       ADC  H 
-       MOV  H,A 
-       RET
-;* 
-;*                 TSTC   XCH  HL,(SP)   ;*** TSTC OR RST 1 *** 
-;*                        IGNBLK         THIS IS AT LOC. 8 
-;*                        CMP  M         AND THEN JMP HERE 
-TC1    INX  H         ;COMPARE THE BYTE THAT 
-       JZ   TC2       ;FOLLOWS THE RST INST. 
-       PUSH B         ;WITH THE TEXT (DE->)
-       MOV  C,M       ;IFF NOT =, ADD THE 2ND 
-       MVI  B,0       ;BYTE THAT FOLLOWS THE 
-       DAD  B         ;RST TO THE OLD PC 
-       POP  B         ;I.E., DO A RELATIVE 
-       DCX  D         ;JUMP IFF NOT = 
-TC2    INX  D         ;IFF =, SKIP THOSE BYTES
-       INX  H         ;AND CONTINUE
-       XTHL 
-       RET
-;* 
-TSTNUM LXI  H,0       ;*** TSTNUM ***
-       MOV  B,H       ;TEST IFF THE TEXT IS 
-       RST  5         ;A NUMBER
-TN1    CPI  60Q       ;IFF NOT, RETURN 0 IN 
-       RC             ;B AND HL
-       CPI  72Q       ;IFF NUMBERS, CONVERT 
-       RNC            ;TO BINARY IN HL AND 
-       MVI  A,360Q    ;SET A TO # OF DIGITS
-       ANA  H         ;IFF H>255, THERE IS NO 
-       JNZ  QHOW      ;ROOM FOR NEXT DIGIT 
-       INR  B         ;B COUNTS # OF DIGITS
-       PUSH B 
-       MOV  B,H       ;HL=10;*HL+(NEW DIGIT)
-       MOV  C,L 
-       DAD  H         ;WHERE 10;* IS DONE BY
-       DAD  H         ;SHIFT AND ADD 
-       DAD  B 
-       DAD  H 
-       LDAX D         ;AND (DIGIT) IS FROM 
-       INX  D         ;STRIPPING THE ASCII 
-       ANI  17Q       ;CODE
-       ADD  L 
-       MOV  L,A 
-       MVI  A,0 
-       ADC  H 
-       MOV  H,A 
-       POP  B 
-       LDAX D         ;DO THIS DIGIT AFTER 
-       JP   TN1       ;DIGIT. S SAYS OVERFLOW
-QHOW   PUSH D         ;*** ERROR: "HOW?" *** 
-AHOW   LXI  D,HOW 
-       JMP  ERROR 
-HOW    DB   'HOW?',0DH 
-OK     DB   'OK',0DH 
-WHAT   DB   'WHAT?',0DH 
-SORRY  DB   'SORRY',0DH 
-;* 
-;**************************************************************
-;* 
-;* *** MAIN ***
-;* 
-;* THIS IS THE MAIN LOOP THAT COLLECTS THE TINY BASIC PROGRAM
-;* AND STORES IT IN THE MEMORY.
-;* 
-;* AT START, IT PRINTS OUT "(CR)OK(CR)", AND INITIALIZES THE 
-;* STACK AND SOME OTHER INTERNAL VARIABLES.  THEN IT PROMPTS 
-;* ">" AND READS A LINE.  IFF THE LINE STARTS WITH A NON-ZERO 
-;* NUMBER, THIS NUMBER IS THE LINE NUMBER.  THE LINE NUMBER
-;* (IN 16 BIT BINARY) AND THE REST OF THE LINE (INCLUDING CR)
-;* IS STORED IN THE MEMORY.  IFF A LINE WITH THE SAME LINE
-;* NUMBER IS ALREDY THERE, IT IS REPLACED BY THE NEW ONE.  IF
-;* THE REST OF THE LINE CONSISTS OF A 0DHONLY, IT IS NOT STORED
-;* AND ANY EXISTING LINE WITH THE SAME LINE NUMBER IS DELETED. 
-;* 
-;* AFTER A LINE ISs INSERTED, REPLACED, OR DELETED, THE PROGRAM 
-;* LOOPS BACK AND ASK FOR ANOTHER LINE.  THIS LOOP WILL BE 
-;* TERMINATED WHEN IT READS A LINE WITH ZERO OR NO LINE
-;* NUMBER; AND CONTROL IS TRANSFERED TO "DIRCT".
-;* 
-;* TINY BASIC PROGRAM SAVE AREA STARTS AT THE MEMORY LOCATION
-;* LABELED "TXTBGN" AND ENDED AT "TXTEND".  WE ALWAYS FILL THIS
-;* AREA STARTING AT "TXTBGN", THE UNFILLED PORTION IS POINTED
-;* BY THE CONTENT OF A MEMORY LOCATION LABELED "TXTUNF". 
-;* 
-;* THE MEMORY LOCATION "CURRNT" POINTS TO THE LINE NUMBER
-;* THAT IS CURRENTLY BEING INTERPRETED.  WHILE WE ARE IN 
-;* THIS LOOP OR WHILE WE ARE INTERPRETING A DIRECT COMMAND 
-;* (SEE NEXT SECTION), "CURRNT" SHOULD POINT TO A 0. 
-;* 
-RSTART LXI  SP,STACK  ;SET STACK POINTER
-ST1    CALL CRLF      ;AND JUMP TO HERE
-       LXI  D,OK      ;DE->STRING
-       SUB  A         ;A=0 
-       CALL PRTSTG    ;PRINT STRING UNTIL 0DH
-       LXI  H,ST2+1   ;LITERAL 0 
-       SHLD CURRNT    ;CURRNT->LINE # = 0
-ST2    LXI  H,0 
-       SHLD LOPVAR
-       SHLD STKGOS
-ST3    MVI  A,76Q     ;PROMPT '>' AND
-       CALL GETLN     ;READ A LINE 
-       PUSH D         ;DE->END OF LINE 
-ST3A   LXI  D,BUFFER  ;DE->BEGINNING OF LINE 
-       CALL TSTNUM    ;TESt IFF IT IS A NUMBER
-       RST  5 
-       MOV  A,H       ;HL=VALUE OF THE # OR
-       ORA  L         ;0 IFF NO # WAS FOUND 
-       POP  B         ;BC->END OF LINE 
-       JZ   DIRECT
-       DCX  D         ;BACKUP DE AND SAVE
-       MOV  A,H       ;VALUE OF LINE # THERE 
-       STAX D 
-       DCX  D 
-       MOV  A,L 
-       STAX D 
-       PUSH B         ;BC,DE->BEGIN, END 
-       PUSH D 
-       MOV  A,C 
-       SUB  E 
-       PUSH PSW       ;A=# OF BYTES IN LINE
-       CALL FNDLN     ;FIND THIS LINE IN SAVE
-       PUSH D         ;AREA, DE->SAVE AREA 
-       JNZ  ST4       ;NZ:NOT FOUND, INSERT
-       PUSH D         ;Z:FOUND, DELETE IT
-       CALL FNDNXT    ;FIND NEXT LINE
-;*                                       DE->NEXT LINE 
-       POP  B         ;BC->LINE TO BE DELETED
-       LHLD TXTUNF    ;HL->UNFILLED SAVE AREA
-       CALL MVUP      ;MOVE UP TO DELETE 
-       MOV  H,B       ;TXTUNF->UNFILLED AREA 
-       MOV  L,C 
-       SHLD TXTUNF    ;UPDATE
-ST4    POP  B         ;GET READY TO INSERT 
-       LHLD TXTUNF    ;BUT FIRT CHECK IF
-       POP  PSW       ;THE LENGTH OF NEW LINE
-       PUSH H         ;IS 3 (LINE # AND CR)
-       CPI  3         ;THEN DO NOT INSERT
-       JZ   RSTART    ;MUST CLEAR THE STACK
-       ADD  L         ;COMPUTE NEW TXTUNF
-       MOV  L,A 
-       MVI  A,0 
-       ADC  H 
-       MOV  H,A       ;HL->NEW UNFILLED AREA 
-ST4A   LXI  D,TXTEND  ;CHECK TO SEE IF THERE 
-       RST  4         ;IS ENOUGH SPACE 
-       JNC  QSORRY    ;SORRY, NO ROOM FOR IT 
-       SHLD TXTUNF    ;OK, UPDATE TXTUNF 
-       POP  D         ;DE->OLD UNFILLED AREA 
-       CALL MVDOWN
-       POP  D         ;DE->BEGIN, HL->END
-       POP  H 
-       CALL MVUP      ;MOVE NEW LINE TO SAVE 
-       JMP  ST3       ;AREA
-;* 
-;**************************************************************
-;* 
-;* *** TABLES *** DIRECT *** & EXEC ***
-;* 
-;* THIS SECTION OF THE CODE TESTS A STRING AGAINST A TABLE.
-;* WHEN A MATCH IS FOUND, CONTROL IS TRANSFERED TO THE SECTION 
-;* OF CODE ACCORDING TO THE TABLE. 
-;* 
-;* AT 'EXEC', DE SHOULD POINT TO THE STRING AD HL SHOULD POINT
-;* TO THE TABLE-1.  AT 'DIRECT', DE SHOULD POINT TO THE STRING,
-;* HL WILL BE SET UP TO POINT TO TAB1-1, WHICH IS THE TABLE OF 
-;* ALL DIRECT AND STATEMENT COMMANDS.
-;* 
-;* A '.' IN THE STRING WILL TERMINATE THE TEST AND THE PARTIAL 
-;* MATCH WILL BE CONSIDERED AS A MATCH.  E.G., 'P.', 'PR.',
-;* 'PRI.', 'PRIN.', OR 'PRINT' WILL ALL MATCH 'PRINT'. 
-;* 
-;* THE TABLE CONSISTS OF ANY NUMBER OF ITEMS.  EACH ITEM 
-;* IS A STRING OF CHARACTERS WITH BIT 7 SET TO 0 AND 
-;* A JUMP ADDRESS STORED HI-LOW WITH BIT 7 OF THE HIGH 
-;* BYTE SET TO 1.
-;* 
-;* END OF TABLE IS AN ITEM WITH A JUMP ADDRESS ONLY.  IFF THE 
-;* STRING DOES NOT MATCH ANY OF THE OTHER ITEMS, IT WILL 
-;* MATCH THIS NULL ITEM AS DEFAULT.
-;* 
-TAB1   EQU  $         ;DIRECT COMMANDS 
-       DB   'LIST'
-       DB   LIST SHR 8 + 128,LIST AND 0FFH
-       DB   'RUN'
-       DB   RUN SHR 8 + 128,RUN AND 255
-       DB   'NEW'
-       DB   NEW SHR 8 + 128,NEW AND 255
-       DB   'LOAD'
-       DB   DLOAD SHR 8 + 128,DLOAD AND 255
-       DB   'SAVE'
-       DB   DSAVE SHR 8 + 128,DSAVE AND 255
-       DB   'BYE',80H,0H   ;GO BACK TO CPM
-TAB2   EQU  $         ;DIRECT/TATEMENT
-       DB   'NEXT'
-       DB   NEXT SHR 8 + 128,NEXT AND 255
-       DB   'LET'
-       DB   LET SHR 8 + 128,LET AND 255
-       DB   'OUT'
-       DB   OUTCMD SHR 8 + 128,OUTCMD AND 255 
-       DB   'POKE'
-       DB   POKE SHR 8 + 128,POKE AND 255
-       DB   'WAIT'
-       DB   WAITCM SHR 8 + 128,WAITCM AND 255
-       DB   'IF'
-       DB   IFF SHR 8 + 128,IFF AND 255
-       DB   'GOTO'
-       DB   GOTO SHR 8 + 128,GOTO AND 255
-       DB   'GOSUB'
-       DB   GOSUB SHR 8 + 128,GOSUB AND 255
-       DB   'RETURN'
-       DB   RETURN SHR 8 + 128,RETURN AND 255
-       DB   'REM'
-       DB   REM SHR 8 + 128,REM AND 255
-       DB   'FOR'
-       DB   FOR SHR 8 + 128,FOR AND 255
-       DB   'INPUT'
-       DB   INPUT SHR 8 + 128,INPUT AND 255
-       DB   'PRINT'
-       DB   PRINT SHR 8 + 128,PRINT AND 255
-       DB   'STOP'
-       DB   STOP SHR 8 + 128,STOP AND 255
-       DB   DEFLT SHR 8 + 128,DEFLT AND 255
-       DB   'YOU CAN ADD MORE' ;COMMANDS BUT
-            ;REMEMBER TO MOVE DEFAULT DOWN.
-TAB4   EQU  $         ;FUNCTIONS 
-       DB   'RND'
-       DB   RND SHR 8 + 128,RND AND 255
-       DB   'INP'
-       DB   INP SHR 8 + 128,INP AND 255
-       DB   'PEEK'
-       DB   PEEK SHR 8 + 128,PEEK AND 255
-       DB   'USR'
-       DB   USR SHR 8 + 128,USR AND 255
-       DB   'ABS'
-       DB   ABS SHR 8 + 128,ABS AND 255
-       DB   'SIZE'
-       DB   SIZE SHR 8 + 128,SIZE AND 255
-       DB   XP40 SHR 8 + 128,XP40 AND 255
-       DB   'YOU CAN ADD MORE' ;FUNCTIONS BUT REMEMBER
-                      ;TO MOVE XP40 DOWN
-TAB5   EQU  $         ;"TO" IN "FOR" 
-       DB   'TO'
-       DB   FR1 SHR 8 + 128,FR1 AND 255
-       DB   QWHAT SHR 8 + 128,QWHAT AND 255
-TAB6   EQU  $         ;"STEP" IN "FOR" 
-       DB   'STEP'
-       DB   FR2 SHR 8 + 128,FR2 AND 255
-       DB   FR3 SHR 8 + 128,FR3 AND 255
-TAB8   EQU  $         ;RELATION OPERATORS
-       DB   '>='
-       DB   XP11 SHR 8 + 128,XP11 AND 255
-       DB   '#'
-       DB   XP12 SHR 8 + 128,XP12 AND 255
-       DB   '>'
-       DB   XP13 SHR 8 + 128,XP13 AND 255
-       DB   '='
-       DB   XP15 SHR 8 + 128,XP15 AND 255
-       DB   '<='
-       DB   XP14 SHR 8 + 128,XP14 AND 255
-       DB   '<'
-       DB   XP16 SHR 8 + 128,XP16 AND 255
-       DB   XP17 SHR 8 + 128,XP17 AND 255
-;* 
-DIRECT LXI  H,TAB1-1  ;*** DIRECT ***
-;* 
-EXEC   EQU  $         ;*** EXEC ***
-EX0    RST  5         ;IGNORE LEADING BLANKS 
-       PUSH D         ;SAVE POINTER
-EX1    LDAX D         ;IFF FOUND '.' IN STRING
-       INX  D         ;BEFORE ANY MISMATCH 
-       CPI  56Q       ;WE DECLARE A MATCH
-       JZ   EX3 
-       INX  H         ;HL->TABLE 
-       CMP  M         ;IFF MATCH, TEST NEXT 
-       JZ   EX1 
-       MVI  A,177Q    ;ELSE, SEE IFF BIT 7
-       DCX  D         ;OF TABLEIS SET, WHICH
-       CMP  M         ;IS THE JUMP ADDR. (HI)
-       JC   EX5       ;C:YES, MATCHED
-EX2    INX  H         ;NC:NO, FIND JUMP ADDR.
-       CMP  M 
-       JNC  EX2 
-       INX  H         ;BUMP TO NEXT TAB. ITEM
-       POP  D         ;RESTORE STRING POINTER
-       JMP  EX0       ;TEST AGAINST NEXT ITEM
-EX3    MVI  A,177Q    ;PARTIAL MATCH, FIND 
-EX4    INX  H         ;JUMP ADDR., WHICH IS
-       CMP  M         ;FLAGGED BY BIT 7
-       JNC  EX4 
-EX5    MOV  A,M       ;LOAD HL WITH THE JUMP 
-       INX  H         ;ADDRESS FROM THE TABLE
-       MOV  L,M 
-       ANI  177Q      ;MASK OFF BIT 7
-       MOV  H,A 
-       POP  PSW       ;CLEAN UP THE GABAGE 
-       PCHL           ;AND WE GO DO IT 
-;* 
-;**************************************************************
-;* 
-;* WHAT FOLLOWS IS THE CODE TO EXECUTE DIRECT AND STATEMENT
-;* COMMANDS.  CONTROL IS TRANSFERED TO THESE POINTS VIA THE
-;* COMMAND TABLE LOOKUP CODE OF 'DIRECT' AND 'EXEC' IN LAST
-;* SECTION.  AFTER THE COMMAND IS EXECUTED, CONTROL IS 
-;* TANSFERED TO OTHER SECTIONS AS FOLLOWS:
-;* 
-;* FOR 'LIST', 'NEW', AND 'STOP': GO BACK TO 'RSTART'
-;* FOR 'RUN': GO EXECUTE THE FIRST STORED LINE IFF ANY; ELSE
-;* GO BACK TO 'RSTART'.
-;* FOR 'GOTO' AND 'GOSUB': GO EXECUTE THE TARGET LINE. 
-;* FOR 'RETURN' AND 'NEXT': GO BACK TO SAVED RETURN LINE.
-;* FOR ALL OTHERS: IFF 'CURRNT' -> 0, GO TO 'RSTART', ELSE
-;* GO EXECUTE NEXT COMMAND.  (THIS IS DONE IN 'FINISH'.) 
-;* 
-;**************************************************************
-;* 
-;* *** NEW *** STOP *** RUN (& FRIENDS) *** & GOTO *** 
-;* 
-;* 'NEW(CR)' SETS 'TXTUNF' TO POINT TO 'TXTBGN'
-;* 
-;* 'STOP(CR)' GOES BACK TO 'RSTART'
-;* 
-;* 'RUN(CR)' FINDS THE FIRST STORED LINE, STORE ITS ADDRESS (IN
-;* 'CURRNT'), AND START EXECUTE IT.  NOTE THAT ONLY THOSE
-;* COMMANDS IN TAB2 ARE LEGAL FOR STORED PROGRAM.
-;* 
-;* THERE ARE 3 MORE ENTRIES IN 'RUN':
-;* 'RUNNXL' FINDS NEXT LINE, STORES ITS ADDR. AND EXECUTES IT. 
-;* 'RUNTSL' STORES THE ADDRESS OF THIS LINE AND EXECUTES IT. 
-;* 'RUNSML' CONTINUES THE EXECUTION ON SAME LINE.
-;* 
-;* 'GOTO EXPR(CR)' EVALUATES THE EXPRESSION, FIND THE TARGET 
-;* LINE, AND JUMP TO 'RUNTSL' TO DO IT.
-;* 'DLOAD' LOADS A NAMED PROGRAM FROM DISK.
-;* 'DSAVE' SAVES A NAMED PROGRAM ON DISK.
-;* 'FCBSET' SETS UP THE FILE CONTROL BLOCK FOR SUBSEQUENT DISK I/O.
-;* 
-NEW    CALL ENDCHK    ;*** NEW(CR) *** 
-       LXI  H,TXTBGN
-       SHLD TXTUNF
-;* 
-STOP   CALL ENDCHK    ;*** STOP(CR) ***
-       JMP RSTART
-;* 
-RUN    CALL ENDCHK    ;*** RUN(CR) *** 
-       LXI  D,TXTBGN  ;FIRST SAVED LINE
-;* 
-RUNNXL LXI  H,0       ;*** RUNNXL ***
-       CALL FNDLNP    ;FIND WHATEVER LINE #
-       JC   RSTART    ;C:PASSED TXTUNF, QUIT 
-;* 
-RUNTSL XCHG           ;*** RUNTSL ***
-       SHLD CURRNT    ;SET 'CURRNT'->LINE #
-       XCHG 
-       INX  D         ;BUMP PASS LINE #
-       INX  D 
-;* 
-RUNSML CALL CHKIO     ;*** RUNSML ***
-       LXI  H,TAB2-1  ;FIND COMMAND IN TAB2
-       JMP  EXEC      ;AND EXECUTE IT
-;* 
-GOTO   RST  3         ;*** GOTO EXPR *** 
-       PUSH D         ;SAVE FOR ERROR ROUTINE
-       CALL ENDCHK    ;MUST FIND A 0DH
-       CALL FNDLN     ;FIND THE TARGET LINE
-       JNZ  AHOW      ;NO SUCH LINE #
-       POP  PSW       ;CLEAR THE "PUSH DE" 
-       JMP  RUNTSL    ;GO DO IT
-CPM    EQU  5         ;DISK PARAMETERS
-FCB    EQU  5CH
-SETDMA EQU  26
-OPEN   EQU  15
-READD  EQU  20
-WRITED EQU  21
-CLOSE  EQU  16
-MAKE   EQU  22
-DELETE EQU  19
-;*
-DLOAD  RST  5         ;IGNORE BLANKS
-       PUSH H         ;SAVE H
-       CALL FCBSET    ;SET UP FILE CONTROL BLOCK
-       PUSH D         ;SAVE THE REST
-       PUSH B         
-       LXI  D,FCB     ;GET FCB ADDRESS
-       MVI  C,OPEN    ;PREPARE TO OPEN FILE
-       CALL CPM       ;OPEN IT
-       CPI  0FFH      ;IS IT THERE?
-       JZ   QHOW      ;NO, SEND ERROR
-       XRA  A         ;CLEAR A
-       STA  FCB+32    ;START AT RECORD 0
-       LXI  D,TXTUNF  ;GET BEGINNING
-LOAD   PUSH D         ;SAVE DMA ADDRESS
-       MVI  C,SETDMA  ;
-       CALL CPM       ;SET DMA ADDRESS
-       MVI  C,READD   ;
-       LXI  D,FCB
-       CALL CPM       ;READ SECTOR
-       CPI  1         ;DONE?
-       JC   RDMORE    ;NO, READ MORE
-       JNZ  QHOW      ;BAD READ
-       MVI  C,CLOSE
-       LXI  D,FCB 
-       CALL CPM       ;CLOSE FILE
-       POP  D         ;THROW AWAY DMA ADD.
-       POP  B         ;GET OLD REGISTERS BACK
-       POP  D
-       POP  H
-       RST  6         ;FINISH
-RDMORE POP  D         ;GET DMA ADDRESS
-       LXI  H,80H     ;GET 128
-       DAD  D         ;ADD 128 TO DMA ADD.
-       XCHG           ;PUT IT BACK IN D
-       JMP  LOAD      ;AND READ SOME MORE
-;*
-DSAVE  RST  5         ;IGNORE BLANKS
-       PUSH H         ;SAVE H
-       CALL FCBSET    ;SETUP FCB
-       PUSH D
-       PUSH B         ;SAVE OTHERS
-       LXI  D,FCB
-       MVI  C,DELETE
-       CALL CPM       ;ERASE FILE IF IT EXISTS
-       LXI  D,FCB  
-       MVI  C,MAKE
-       CALL CPM       ;MAKE A NEW ONE
-       CPI  0FFH      ;IS THERE SPACE?
-       JZ   QHOW      ;NO, ERROR
-       XRA  A         ;CLEAR A
-       STA  FCB+32    ;START AT RECORD 0
-       LXI  D,TXTUNF  ;GET BEGINNING
-SAVE   PUSH D         ;SAVE DMA ADDRESS
-       MVI  C,SETDMA  ;
-       CALL CPM       ;SET DMA ADDRESS
-       MVI  C,WRITED
-       LXI  D,FCB 
-       CALL CPM       ;WRITE SECTOR
-       ORA  A         ;SET FLAGS
-       JNZ  QHOW      ;IF NOT ZERO, ERROR
-       POP  D         ;GET DMA ADD. BACK
-       LDA  TXTUNF+1  ;AND MSB OF LAST ADD.
-       CMP  D         ;IS D SMALLER?
-       JC   SAVDON    ;YES, DONE
-       JNZ  WRITMOR   ;DONT TEST E IF NOT EQUAL
-       LDA  TXTUNF    ;IS E SMALLER?
-       CMP  E
-       JC   SAVDON    ;YES, DONE
-WRITMOR LXI  H,80H 
-       DAD  D         ;ADD 128 TO DMA ADD.
-       XCHG           ;GET IT BACK IN D
-       JMP  SAVE      ;WRITE SOME MORE
-SAVDON MVI  C,CLOSE
-       LXI  D,FCB 
-       CALL CPM       ;CLOSE FILE
-       POP  B         ;GET REGISTERS BACK
-       POP  D
-       POP  H
-       RST  6         ;FINISH
-;*
-FCBSET LXI  H,FCB     ;GET FILE CONTROL BLOCK ADDRESS
-       MVI  M,0       ;CLEAR ENTRY TYPE
-FNCLR  INX  H         ;NEXT LOCATION
-       MVI  M,' '     ;CLEAR TO SPACE
-       MVI  A,FCB+8 AND 255
-       CMP  L         ;DONE?
-       JNZ  FNCLR     ;NO, DO IT AGAIN
-       INX  H         ;NEXT
-       MVI  M,'T'     ;SET FILE TYPE TO 'TBI'
-       INX  H
-       MVI  M,'B'
-       INX  H
-       MVI  M,'I'
-EXRC   INX  H         ;CLEAR REST OF FCB
-       MVI  M,0
-       MVI  A,FCB+15 AND 255
-       CMP  L         ;DONE?
-       JNZ  EXRC      ;NO, CONTINUE
-       LXI  H,FCB+1   ;GET FILENAME START
-FN     LDAX D         ;GET CHARACTER
-       CPI  0DH       ;IS IT A 'CR'
-       RZ             ;YES, DONE
-       CPI  '!'       ;LEGAL CHARACTER?
-       JC   QWHAT     ;NO, SEND ERROR
-       CPI  '['       ;AGAIN
-       JNC  QWHAT     ;DITTO
-       MOV  M,A        ;SAVE IT IN FCB
-       INX  H         ;NEXT
-       INX  D
-       MVI  A,FCB+9 AND 255
-       CMP  L         ;LAST?
-       JNZ  FN        ;NO, CONTINUE
-       RET            ;TRUNCATE AT 8 CHARACTERS
-;* 
-;************************************************************* 
-;* 
-;* *** LIST *** & PRINT ***
-;* 
-;* LIST HAS TWO FORMS: 
-;* 'LIST(CR)' LISTS ALL SAVED LINES
-;* 'LIST #(CR)' START LIST AT THIS LINE #
-;* YOU CAN STOP THE LISTING BY CONTROL C KEY 
-;* 
-;* PRINT COMMAND IS 'PRINT ....;' OR 'PRINT ....(CR)'
-;* WHERE '....' IS A LIST OF EXPRESIONS, FORMATS, BACK-
-;* ARROWS, AND STRINGS.  THESE ITEMS ARE SEPERATED BY COMMAS.
-;* 
-;* A FORMAT IS A POUND SIGN FOLLOWED BY A NUMBER.  IT CONTROLSs 
-;* THE NUMBER OF SPACES THE VALUE OF A EXPRESION IS GOING TO 
-;* BE PRINTED.  IT STAYS EFFECTIVE FOR THE REST OF THE PRINT 
-;* COMMAND UNLESS CHANGED BY ANOTHER FORMAT.  IFF NO FORMAT IS
-;* SPECIFIED, 6 POSITIONS WILL BE USED.
-;* 
-;* A STRING IS QUOTED IN A PAIR OF SINGLE QUOTES OR A PAIR OF
-;* DOUBLE QUOTES.
-;* 
-;* A BACK-ARROW MEANS GENERATE A (CR) WITHOUT (LF) 
-;* 
-;* A (CRLF) IS GENERATED AFTER THE ENTIRE LIST HAS BEEN
-;* PRINTED OR IFF THE LIST IS A NULL LIST.  HOWEVER IFF THE LIST 
-;* ENDED WITH A COMMA, NO (CRL) IS GENERATED. 
-;* 
-LIST   CALL TSTNUM    ;TEST IFF THERE IS A #
-       CALL ENDCHK    ;IFF NO # WE GET A 0
-       CALL FNDLN     ;FIND THIS OR NEXT LINE
-LS1    JC   RSTART    ;C:PASSED TXTUNF 
-       CALL PRTLN     ;PRINT THE LINE
-       CALL CHKIO     ;STOP IFF HIT CONTROL-C 
-       CALL FNDLNP    ;FIND NEXT LINE
-       JMP  LS1       ;AND LOOP BACK 
-;* 
-PRINT  MVI  C,6       ;C = # OF SPACES 
-       RST  1         ;IFF NULL LIST & ";"
-       DB   73Q 
-       DB   6Q 
-       CALL CRLF      ;GIVE CR-LF AND
-       JMP  RUNSML    ;CONTINUE SAME LINE
-PR2    RST  1         ;IFF NULL LIST (CR) 
-       DB   0DH
-       DB   6Q
-       CALL CRLF      ;ALSO GIVE CR-LF AND 
-       JMP  RUNNXL    ;GO TO NEXT LINE 
-PR0    RST  1         ;ELSE IS IT FORMAT?
-       DB   '#' 
-       DB   5Q
-       RST  3         ;YES, EVALUATE EXPR. 
-       MOV  C,L       ;AND SAVE IT IN C
-       JMP  PR3       ;LOOK FOR MORE TO PRINT
-PR1    CALL QTSTG     ;OR IS IT A STRING?
-       JMP  PR8       ;IFF NOT, MUST BE EXPR. 
-PR3    RST  1         ;IFF ",", GO FIND NEXT
-       DB   ',' 
-       DB   6Q
-       CALL FIN       ;IN THE LIST.
-       JMP  PR0       ;LIST CONTINUES
-PR6    CALL CRLF      ;LIST ENDS 
-       RST  6 
-PR8    RST  3         ;EVALUATE THE EXPR 
-       PUSH B 
-       CALL PRTNUM    ;PRINT THE VALUE 
-       POP  B 
-       JMP  PR3       ;MORE TO PRINT?
-;* 
-;**************************************************************
-;* 
-;* *** GOSUB *** & RETURN ***
-;* 
-;* 'GOSUB EXPR;' OR 'GOSUB EXPR (CR)' IS LIKE THE 'GOTO' 
-;* COMMAND, EXCEPT THAT THE CURRENT TEXT POINTER, STACK POINTER
-;* ETC. ARE SAVE SO THAT EXECUTION CAN BE CONTINUED AFTER THE
-;* SUBROUTINE 'RETURN'.  IN ORDER THAT 'GOSUB' CAN BE NESTED 
-;* (AND EVEN RECURSIVE), THE SAVE AREA MUST BE STACKED.
-;* THE STACK POINTER IS SAVED IN 'STKGOS'. THE OLD 'STKGOS' IS 
-;* SAVED IN THE STACK.  IFF WE ARE IN THE MAIN ROUTINE, 'STKGOS'
-;* IS ZERO (THIS WAS DONE BY THE "MAIN" SECTION OF THE CODE),
-;* BUT WE STILL SAVE IT AS A FLAG FORr NO FURTHER 'RETURN'S.
-;* 
-;* 'RETURN(CR)' UNDOS EVERYHING THAT 'GOSUB' DID, AND THUS
-;* RETURN THE EXCUTION TO THE COMMAND AFTER THE MOST RECENT
-;* 'GOSUB'.  IFF 'STKGOS' IS ZERO, IT INDICATES THAT WE 
-;* NEVER HAD A 'GOSUB' AND IS THUS AN ERROR. 
-;* 
-GOSUB  CALL PUSHA     ;SAVE THE CURRENT "FOR"
-       RST  3         ;PARAMETERS
-       PUSH D         ;AND TEXT POINTER
-       CALL FNDLN     ;FIND THE TARGET LINE
-       JNZ  AHOW      ;NOT THERE. SAY "HOW?" 
-       LHLD CURRNT    ;FOUND IT, SAVE OLD
-       PUSH H         ;'CURRNT' OLD 'STKGOS' 
-       LHLD STKGOS
-       PUSH H 
-       LXI  H,0       ;AND LOAD NEW ONES 
-       SHLD LOPVAR
-       DAD  SP
-       SHLD STKGOS
-       JMP  RUNTSL    ;THEN RUN THAT LINE
-RETURN CALL ENDCHK    ;THERE MUST BE A 0DH
-       LHLD STKGOS    ;OLD STACK POINTER 
-       MOV  A,H       ;0 MEANS NOT EXIST 
-       ORA  L 
-       JZ   QWHAT     ;SO, WE SAY: "WHAT?" 
-       SPHL           ;ELSE, RESTORE IT
-       POP  H 
-       SHLD STKGOS    ;AND THE OLD 'STKGOS'
-       POP  H 
-       SHLD CURRNT    ;AND THE OLD 'CURRNT'
-       POP  D         ;OLD TEXT POINTER
-       CALL POPA      ;OLD "FOR" PARAMETERS
-       RST  6         ;AND WE ARE BACK HOME
-;* 
-;**************************************************************
-;* 
-;* *** FOR *** & NEXT ***
-;* 
-;* 'FOR' HAS TWO FORMS:
-;* 'FOR VAR=EXP1 TO EXP2 STEP EXP1' AND 'FOR VAR=EXP1 TO EXP2' 
-;* THE SECOND FORM MEANS THE SAME THING AS THE FIRST FORM WITH 
-;* EXP1=1.  (I.E., WITH A STEP OF +1.) 
-;* TBI WILL FIND THE VARIABLE VAR. AND SET ITS VALUE TO THE
-;* CURRENT VALUE OF EXP1.  IT ALSO EVALUATES EXPR2 AND EXP1
-;* AND SAVE ALL THESE TOGETHER WITH THE TEXT POINTERr ETC. IN 
-;* THE 'FOR' SAVE AREA, WHICH CONSISTS OF 'LOPVAR', 'LOPINC',
-;* 'LOPLMT', 'LOPLN', AND 'LOPPT'.  IFF THERE IS ALREADY SOME-
-;* THING IN THE SAVE AREA (THIS IS INDICATED BY A NON-ZERO 
-;* 'LOPVAR'), THEN THE OLD SAVE AREA IS SAVED IN THE STACK 
-;* BEFORE THE NEW ONE OVERWRITES IT. 
-;* TBI WILL THEN DIG IN THE STACK AND FIND OUT IFF THIS SAME
-;* VARIABLE WAS USED IN ANOTHER CURRENTLY ACTIVE 'FOR' LOOP. 
-;* IFF THAT IS THE CASE THEN THE OLD 'FOR' LOOP IS DEACTIVATED.
-;* (PURGED FROM THE STACK..) 
-;* 
-;* 'NEXT VAR' SERVES AS THE LOGICAL (NOT NECESSARILLY PHYSICAL)
-;* END OF THE 'FOR' LOOP.  THE CONTROL VARIABLE VAR. IS CHECKED
-;* WITH THE 'LOPVAR'.  IFF THEY ARE NOT THE SAME, TBI DIGS IN 
-;* THE STACK TO FIND THE RIGHTt ONE AND PURGES ALL THOSE THAT 
-;* DID NOT MATCH.  EITHER WAY, TBI THEN ADDS THE 'STEP' TO 
-;* THAT VARIABLE AND CHECK THE RESULT WITH THE LIMIT.  IFF IT 
-;* IS WITHIN THE LIMIT, CONTROL LOOPS BACK TO THE COMMAND
-;* FOLLOWING THE 'FOR'.  IFF OUTSIDE THE LIMIT, THE SAVE ARER 
-;* IS PURGED AND EXECUTION CONTINUES.
-;* 
-FOR    CALL PUSHA     ;SAVE THE OLD SAVE AREA
-       CALL SETVAL    ;SET THE CONTROL VAR.
-       DCX  H         ;HL IS ITS ADDRESS 
-       SHLD LOPVAR    ;SAVE THAT 
-       LXI  H,TAB5-1  ;USE 'EXEC' TO LOOK
-       JMP  EXEC      ;FOR THE WORD 'TO' 
-FR1    RST  3         ;EVALUATE THE LIMIT
-       SHLD LOPLMT    ;SAVE THAT 
-       LXI  H,TAB6-1  ;USE 'EXEC' TO LOOK
-       JMP  EXEC      ;FOR THE WORD 'STEP'
-FR2    RST  3         ;FOUND IT, GET STEP
-       JMP  FR4 
-FR3    LXI  H,1Q      ;NOT FOUND, SET TO 1 
-FR4    SHLD LOPINC    ;SAVE THAT TOO 
-FR5    LHLD CURRNT    ;SAVE CURRENT LINE # 
-       SHLD LOPLN 
-       XCHG           ;AND TEXT POINTER
-       SHLD LOPPT 
-       LXI  B,12Q     ;DIG INTO STACK TO 
-       LHLD LOPVAR    ;FIND 'LOPVAR' 
-       XCHG 
-       MOV  H,B 
-       MOV  L,B       ;HL=0 NOW
-       DAD  SP        ;HERE IS THE STACK 
-       DB   76Q 
-FR7    DAD  B         ;EACH LEVEL IS 10 DEEP 
-       MOV  A,M       ;GET THAT OLD 'LOPVAR' 
-       INX  H 
-       ORA  M 
-       JZ   FR8       ;0 SAYS NO MORE IN IT
-       MOV  A,M 
-       DCX  H 
-       CMP  D         ;SAME AS THIS ONE? 
-       JNZ  FR7 
-       MOV  A,M       ;THE OTHER HALF? 
-       CMP  E 
-       JNZ  FR7 
-       XCHG           ;YES, FOUND ONE
-       LXI  H,0Q
-       DAD  SP        ;TRY TO MOVE SP
-       MOV  B,H 
-       MOV  C,L 
-       LXI  H,12Q 
-       DAD  D 
-       CALL MVDOWN    ;AND PURGE 10 WORDS
-       SPHL           ;IN THE STACK
-FR8    LHLD LOPPT     ;JOB DONE, RESTORE DE
-       XCHG 
-       RST  6         ;AND CONTINUE
-;* 
-NEXT   RST  7         ;GET ADDRESS OF VAR. 
-       JC   QWHAT     ;NO VARIABLE, "WHAT?"
-       SHLD VARNXT    ;YES, SAVE IT
-NX0    PUSH D         ;SAVE TEXT POINTER 
-       XCHG 
-       LHLD LOPVAR    ;GET VAR. IN 'FOR' 
-       MOV  A,H 
-       ORA  L         ;0 SAYS NEVER HAD ONE
-       JZ   AWHAT     ;SO WE ASK: "WHAT?"
-       RST  4         ;ELSE WE CHECK THEM
-       JZ   NX3       ;OK, THEY AGREE
-       POP  D         ;NO, LET'S SEE 
-       CALL POPA      ;PURGE CURRENT LOOP
-       LHLD VARNXT    ;AND POP ONE LEVEL 
-       JMP  NX0       ;GO CHECK AGAIN
-NX3    MOV  E,M       ;COME HERE WHEN AGREED 
-       INX  H 
-       MOV  D,M       ;DE=VALUE OF VAR.
-       LHLD LOPINC
-       PUSH H 
-       DAD  D         ;ADD ONE STEP
-       XCHG 
-       LHLD LOPVAR    ;PUT IT BACK 
-       MOV  M,E 
-       INX  H 
-       MOV  M,D 
-       LHLD LOPLMT    ;HL->LIMIT 
-       POP  PSW       ;OLD HL
-       ORA  A 
-       JP   NX1       ;STEP > 0
-       XCHG 
-NX1    CALL CKHLDE    ;COMPARE WITH LIMIT
-       POP  D         ;RESTORE TEXT POINTER
-       JC   NX2       ;OUTSIDE LIMIT 
-       LHLD LOPLN     ;WITHIN LIMIT, GO
-       SHLD CURRNT    ;BACK TO THE SAVED 
-       LHLD LOPPT     ;'CURRNT' AND TEXT 
-       XCHG           ;POINTER 
-       RST  6 
-NX2    CALL POPA      ;PURGE THIS LOOP 
-       RST  6 
-;* 
-;**************************************************************
-;* 
-;* *** REM *** IFF *** INPUT *** & LET (& DEFLT) ***
-;* 
-;* 'REM' CAN BE FOLLOWED BY ANYTHING AND IS IGNORED BY TBI.
-;* TBI TREATS IT LIKE AN 'IF' WITH A FALSE CONDITION.
-;* 
-;* 'IF' IS FOLLOWED BY AN EXPR. AS A CONDITION AND ONE OR MORE 
-;* COMMANDS (INCLUDING OUTHER 'IF'S) SEPERATED BY SEMI-COLONS. 
-;* NOTE THAT THE WORD 'THEN' IS NOT USED.  TBI EVALUATES THE 
-;* EXPR. IFF IT IS NON-ZERO, EXECUTION CONTINUES.  IFF THE 
-;* EXPR. IS ZERO, THE COMMANDS THAT FOLLOWS ARE IGNORED AND
-;* EXECUTION CONTINUES AT THE NEXT LINE. 
-;* 
-;* 'IPUT' COMMAND IS LIKE THE 'PRINT' COMMAND, AND IS FOLLOWED
-;* BY A LIST OF ITEMS.  IFF THE ITEM IS A STRING IN SINGLE OR 
-;* DOUBLE QUOTES, OR IS A BACK-ARROW, IT HAS THE SAME EFFECT AS
-;* IN 'PRINT'.  IFF AN ITEM IS A VARIABLE, THIS VARIABLE NAME IS
-;* PRINTED OUT FOLLOWED BY A COLON.  THEN TBI WAITS FOR AN 
-;* EXPR. TO BE TYPED IN.  THE VARIABLE ISs THEN SET TO THE
-;* VALUE OF THIS EXPR.  IFF THE VARIABLE IS PROCEDED BY A STRING
-;* (AGAIN IN SINGLE OR DOUBLE QUOTES), THE STRING WILL BE
-;* PRINTED FOLLOWED BY A COLON.  TBI THEN WAITS FOR INPUT EXPR.
-;* AND SET THE VARIABLE TO THE VALUE OF THE EXPR.
-;* 
-;* IFF THE INPUT EXPR. IS INVALID, TBI WILL PRINT "WHAT?",
-;* "HOW?" OR "SORRY" AND REPRINT THE PROMPT AND REDO THE INPUT.
-;* THE EXECUTION WILL NOT TERMINATE UNLESS YOU TYPE CONTROL-C. 
-;* THIS IS HANDLED IN 'INPERR'.
-;* 
-;* 'LET' IS FOLLOWED BY A LIST OF ITEMS SEPERATED BY COMMAS. 
-;* EACH ITEM CONSISTS OF A VARIABLE, AN EQUAL SIGN, AND AN EXPR. 
-;* TBI EVALUATES THE EXPR. AND SET THE VARIBLE TO THAT VALUE.
-;* TB WILL ALSO HANDLE 'LET' COMMAND WITHOUT THE WORD 'LET'.
-;* THIS IS DONE BY 'DEFLT'.
-;* 
-REM    LXI  H,0Q      ;*** REM *** 
-       DB   76Q 
-;* 
-IFF     RST  3         ;*** IFF ***
-       MOV  A,H       ;IS THE EXPR.=0? 
-       ORA  L 
-       JNZ  RUNSML    ;NO, CONTINUE
-       CALL FNDSKP    ;YES, SKIP REST OF LINE
-       JNC  RUNTSL
-       JMP  RSTART
-;* 
-INPERR LHLD STKINP    ;*** INPERR ***
-       SPHL           ;RESTORE OLD SP
-       POP  H         ;AND OLD 'CURRNT'
-       SHLD CURRNT
-       POP  D         ;AND OLD TEXT POINTER
-       POP  D         ;REDO INPUT
-;* 
-INPUT  EQU  $         ;*** INPUT *** 
-IP1    PUSH D         ;SAVE IN CASE OF ERROR 
-       CALL QTSTG     ;IS NEXT ITEM A STRING?
-       JMP  IP2       ;NO
-       RST  7         ;YES. BUT FOLLOWED BY A
-       JC   IP4       ;VARIABLE?   NO. 
-       JMP  IP3       ;YES.  INPUT VARIABLE
-IP2    PUSH D         ;SAVE FOR 'PRTSTG' 
-       RST  7         ;MUST BE VARIABLE NOW
-       JC   QWHAT     ;"WHAT?" IT IS NOT?
-       LDAX D         ;GET READY FOR 'RTSTG'
-       MOV  C,A 
-       SUB  A 
-       STAX D 
-       POP  D 
-       CALL PRTSTG    ;PRINT STRING AS PROMPT
-       MOV  A,C       ;RESTORE TEXT
-       DCX  D 
-       STAX D 
-IP3    PUSH D         ;SAVE IN CASE OF ERROR 
-       XCHG 
-       LHLD CURRNT    ;ALSO SAVE 'CURRNT'
-       PUSH H 
-       LXI  H,IP1     ;A NEGATIVE NUMBER 
-       SHLD CURRNT    ;AS A FLAG 
-       LXI  H,0Q      ;SAVE SP TOO 
-       DAD  SP
-       SHLD STKINP
-       PUSH D         ;OLD HL
-       MVI  A,72Q     ;PRINT THIS TOO
-       CALL GETLN     ;AND GET A LINE
-IP3A   LXI  D,BUFFER  ;POINTS TO BUFFER
-       RST  3         ;EVALUATE INPUT
-       NOP            ;CAN BE 'CALL ENDCHK'
-       NOP
-       NOP
-       POP  D         ;OK, GET OLD HL
-       XCHG 
-       MOV  M,E       ;SAVE VALUE IN VAR.
-       INX  H 
-       MOV  M,D 
-       POP  H         ;GET OLD 'CURRNT'
-       SHLD CURRNT
-       POP  D         ;AND OLD TEXT POINTER
-IP4    POP  PSW       ;PURGE JUNK IN STACK 
-       RST  1         ;IS NEXT CH. ','?
-       DB   ',' 
-       DB   3Q
-       JMP  IP1       ;YES, MORE ITEMS.
-IP5    RST  6 
-;* 
-DEFLT  LDAX D         ;*** DEFLT *** 
-       CPI  0DH       ;EMPTY LINE IS OK
-       JZ   LT1       ;ELSE IT IS 'LET'
-;* 
-LET    CALL SETVAL    ;*** LET *** 
-       RST  1         ;SET VALUE TO VAR. 
-       DB   ',' 
-       DB   3Q
-       JMP  LET       ;ITEM BY ITEM
-LT1    RST  6         ;UNTIL FINISH
-;* 
-;**************************************************************
-;* 
-;* *** EXPR ***
-;* 
-;* 'EXPR' EVALUATES ARITHMETICAL OR LOGICAL EXPRESSIONS. 
-;* <EXPR>::=<EXPR2>
-;*          <EXPR2><REL.OP.><EXPR2>
-;* WHERE <REL.OP.> IS ONE OF THE OPERATORSs IN TAB8 AND THE 
-;* RESULT OF THESE OPERATIONS IS 1 IFF TRUE AND 0 IFF FALSE. 
-;* <EXPR2>::=(+ OR -)<EXPR3>(+ OR -<EXPR3>)(....)
-;* WHERE () ARE OPTIONAL AND (....) ARE OPTIONAL REPEATS.
-;* <EXPR3>::=<EXPR4>(<* OR /><EXPR4>)(....)
-;* <EXPR4>::=<VARIABLE>
-;*           <FUNCTION>
-;*           (<EXPR>)
-;* <EXPR> IS RECURSIVE SO THAT VARIABLE '@' CAN HAVE AN <EXPR> 
-;* AS INDEX, FNCTIONS CAN HAVE AN <EXPR> AS ARGUMENTS, AND
-;* <EXPR4> CAN BE AN <EXPR> IN PARANTHESE. 
-;* 
-;*                 EXPR   CALL EXPR2     THIS IS AT LOC. 18
-;*                        PUSH HL        SAVE <EXPR2> VALUE
-EXPR1  LXI  H,TAB8-1  ;LOOKUP REL.OP.
-       JMP  EXEC      ;GO DO IT
-XP11   CALL XP18      ;REL.OP.">=" 
-       RC             ;NO, RETURN HL=0 
-       MOV  L,A       ;YES, RETURN HL=1
-       RET
-XP12   CALL XP18      ;REL.OP."#"
-       RZ             ;FALSE, RETURN HL=0
-       MOV  L,A       ;TRUE, RETURN HL=1 
-       RET
-XP13   CALL XP18      ;REL.OP.">"
-       RZ             ;FALSE 
-       RC             ;ALSO FALSE, HL=0
-       MOV  L,A       ;TRUE, HL=1
-       RET
-XP14   CALL XP18      ;REL.OP."<=" 
-       MOV  L,A       ;SET HL=1
-       RZ             ;REL. TRUE, RETURN 
-       RC 
-       MOV  L,H       ;ELSE SET HL=0 
-       RET
-XP15   CALL XP18      ;REL.OP."="
-       RNZ            ;FALSE, RETRUN HL=0
-       MOV  L,A       ;ELSE SET HL=1 
-       RET
-XP16   CALL XP18      ;REL.OP."<"
-       RNC            ;FALSE, RETURN HL=0
-       MOV  L,A       ;ELSE SET HL=1 
-       RET
-XP17   POP  H         ;NOT REL.OP. 
-       RET            ;RETURN HL=<EXPR2> 
-XP18   MOV  A,C       ;SUBROUTINE FOR ALL
-       POP  H         ;REL.OP.'S 
-       POP  B 
-       PUSH H         ;REVERSE TOP OF STACK
-       PUSH B 
-       MOV  C,A 
-       CALL EXPR2     ;GET 2ND <EXPR2> 
-       XCHG           ;VALUE IN DE NOW 
-       XTHL           ;1ST <EXPR2> IN HL 
-       CALL CKHLDE    ;COMPARE 1ST WITH 2ND
-       POP  D         ;RESTORE TEXT POINTER
-       LXI  H,0Q      ;SET HL=0, A=1 
-       MVI  A,1 
-       RET
-;* 
-EXPR2  RST  1         ;NEGATIVE SIGN?
-       DB   '-' 
-       DB   6Q
-       LXI  H,0Q      ;YES, FAKE '0-'
-       JMP  XP26      ;TREAT LIKE SUBTRACT 
-XP21   RST  1         ;POSITIVE SIGN?  IGNORE
-       DB   '+' 
-       DB   0Q
-XP22   CALL EXPR3     ;1ST <EXPR3> 
-XP23   RST  1         ;ADD?
-       DB   '+' 
-       DB   25Q 
-       PUSH H         ;YES, SAVE VALUE 
-       CALL EXPR3     ;GET 2ND<EXPR3> 
-XP24   XCHG           ;2ND IN DE 
-       XTHL           ;1ST IN HL 
-       MOV  A,H       ;COMPARE SIGN
-       XRA  D 
-       MOV  A,D 
-       DAD  D 
-       POP  D         ;RESTORE TEXT POINTER
-       JM   XP23      ;1ST 2ND SIGN DIFFER 
-       XRA  H         ;1ST 2ND SIGN EQUAL
-       JP   XP23      ;SO ISp RESULT
-       JMP  QHOW      ;ELSE WE HAVE OVERFLOW 
-XP25   RST  1         ;SUBTRACT? 
-       DB   '-' 
-       DB   203Q
-XP26   PUSH H         ;YES, SAVE 1ST <EXPR3> 
-       CALL EXPR3     ;GET 2ND <EXPR3> 
-       CALL CHGSGN    ;NEGATE
-       JMP  XP24      ;AND ADD THEM
-;* 
-EXPR3  CALL EXPR4     ;GET 1ST <EXPR4> 
-XP31   RST  1         ;MULTIPLY? 
-       DB   '*' 
-       DB   54Q 
-       PUSH H         ;YES, SAVE 1ST 
-       CALL EXPR4     ;AND GET 2ND <EXPR4> 
-       MVI  B,0Q      ;CLEAR B FOR SIGN
-       CALL CHKSGN    ;CHECK SIGN
-       XCHG           ;2ND IN DE NOW 
-       XTHL           ;1ST IN HL 
-       CALL CHKSGN    ;CHECK SIGN OF 1ST 
-       MOV  A,H       ;IS HL > 255 ? 
-       ORA  A 
-       JZ   XP32      ;NO
-       MOV  A,D       ;YES, HOW ABOUT DE 
-       ORA  D 
-       XCHG           ;PUT SMALLER IN HL 
-       JNZ  AHOW      ;ALSO >, WILL OVERFLOW 
-XP32   MOV  A,L       ;THIS IS DUMB
-       LXI  H,0Q      ;CLEAR RESULT
-       ORA  A         ;ADD AND COUNT 
-       JZ   XP35
-XP33   DAD  D 
-       JC   AHOW      ;OVERFLOW
-       DCR  A 
-       JNZ  XP33
-       JMP  XP35      ;FINISHED
-XP34   RST  1         ;DIVIDE? 
-       DB   '/' 
-       DB   104Q
-       PUSH H         ;YES, SAVE 1ST <EXPR4> 
-       CALL EXPR4     ;AND GET 2ND ONE 
-       MVI  B,0Q      ;CLEAR B FOR SIGN
-       CALL CHKSGN    ;CHECK SIGN OF 2ND 
-       XCHG           ;PUT 2ND IN DE 
-       XTHL           ;GET 1ST IN HL 
-       CALL CHKSGN    ;CHECK SIGN OF 1ST 
-       MOV  A,D       ;DIVIDE BY 0?
-       ORA  E 
-       JZ   AHOW      ;SAY "HOW?"
-       PUSH B         ;ELSE SAVE SIGN
-       CALL DIVIDE    ;USE SUBROUTINE
-       MOV  H,B       ;RESULT IN HL NOW
-       MOV  L,C 
-       POP  B         ;GET SIGN BACK 
-XP35   POP  D         ;AND TEXT POINTER
-       MOV  A,H       ;HL MUST BE +
-       ORA  A 
-       JM   QHOW      ;ELSE IT IS OVERFLOW 
-       MOV  A,B 
-       ORA  A 
-       CM   CHGSGN    ;CHANGE SIGN IFF NEEDED 
-       JMP  XP31      ;LOOK OR MORE TERMS 
-;* 
-EXPR4  LXI  H,TAB4-1  ;FIND FUNCTION IN TAB4 
-       JMP  EXEC      ;AND GO DO IT
-XP40   RST  7         ;NO, NOT A FUNCTION
-       JC   XP41      ;NOR A VARIABLE
-       MOV  A,M       ;VARIABLE
-       INX  H 
-       MOV  H,M       ;VALUE IN HL 
-       MOV  L,A 
-       RET
-XP41   CALL TSTNUM    ;OR IS IT A NUMBER 
-       MOV  A,B       ;# OF DIGIT
-       ORA  A 
-       RNZ            ;OK
-PARN   RST  1         ;NO DIGIT, MUST BE 
-       DB   '(' 
-       DB   5Q
-       RST  3         ;"(EXPR)"
-       RST  1 
-       DB   ')' 
-       DB   1Q
-XP42   RET
-XP43   JMP  QWHAT     ;ELSE SAY: "WHAT?" 
-;* 
-RND    CALL PARN      ;*** RND(EXPR) *** 
-       MOV  A,H       ;EXPR MUST BE +
-       ORA  A 
-       JM   QHOW
-       ORA  L         ;AND NON-ZERO
-       JZ   QHOW
-       PUSH D         ;SAVE BOTH 
-       PUSH H 
-       LHLD RANPNT    ;GET MEMORY AS RANDOM
-       LXI  D,LSTROM  ;NUMBER
-       RST  4 
-       JC   RA1       ;WRAP AROUND IFF LAST 
-       LXI  H,START 
-RA1    MOV  E,M 
-       INX  H 
-       MOV  D,M 
-       SHLD RANPNT
-       POP  H 
-       XCHG 
-       PUSH B 
-       CALL DIVIDE    ;RND(N)=MOD(M,N)+1 
-       POP  B 
-       POP  D 
-       INX  H 
-       RET
-;* 
-ABS    CALL PARN      ;*** ABS(EXPR) *** 
-       CALL CHKSGN    ;CHECK SIGN
-       MOV  A,H       ;NOTE THAT -32768
-       ORA  H         ;CANNOT CHANGE SIGN
-       JM   QHOW      ;SO SAY: "HOW?"
-       RET
-SIZE   LHLD TXTUNF    ;*** SIZE ***
-       PUSH D         ;GET THE NUMBER OF FREE
-       XCHG           ;BYTES BETWEEN 'TXTUNF'
-SIZEA  LXI  H,VARBGN  ;AND 'VARBGN'
-       CALL SUBDE 
-       POP  D 
-       RET
-;*
-;*********************************************************
-;*
-;*   *** OUT *** INP *** WAIT *** POKE *** PEEK *** & USR
-;*
-;*  OUT I,J(,K,L)
-;*
-;*  OUTPUTS EXPRESSION 'J' TO PORT 'I', AND MAY BE REPEATED
-;*  AS IN DATA 'L' TO PORT 'K' AS MANY TIMES AS NEEDED
-;*  THIS COMMAND MODIFIES ;*  THIS COMMAND MODIFIES 
-;*  THIS COMMAND MODIFY'S A SMALL SECTION OF CODE LOCATED 
-;*  JUST ABOVE ADDRESS 2K
-;*
-;*  INP (I)
-;*
-;*  THIS FUNCTION RETURNS DATA READ FROM INPUT PORT 'I' AS
-;*  IT'S VALUE.
-;*  IT ALSO MODIFIES CODE JUST ABOVE 2K.
-;*
-;*  WAIT I,J,K
-;*
-;*  THIS COMMAND READS THE STATUS OF PORT 'I', EXCLUSIVE OR'S
-;*  THE RESULT WITH 'K' IF THERE IS ONE, OR IF NOT WITH 0, 
-;*  AND'S WITH 'J' AND RETURNS WHEN THE RESULT IS NONZERO.
-;*  ITS MODIFIED CODE IS ALSO ABOVE 2K.
-;*
-;*  POKE I,J(,K,L)
-;*
-;*  THIS COMMAND WORKS LIKE OUT EXCEPT THAT IT PUTS DATA 'J'
-;*  INTO MEMORY LOCATION 'I'.
-;*
-;*  PEEK (I)
-;*
-;*  THIS FUNCTION WORKS LIKE INP EXCEPT IT GETS IT'S VALUE
-;*  FROM MEMORY LOCATION 'I'.
-;*
-;*  USR (I(,J))
-;*
-;*  USR CALLS A MACHINE LANGUAGE SUBROUTINE AT LOCATION 'I'
-;*  IF THE OPTIONAL PARAMETER 'J' IS USED ITS VALUE IS PASSED
-;*  IN H&L.  THE VALUE OF THE FUNCTION SHOULD BE RETURNED IN H&L.
-;*
-;************************************************************
-;*
-OUTCMD RST  3 
-       MOV  A,L
-       STA  OUTIO + 1
-       RST  1
-       DB   ','
-       DB   2FH
-       RST  3
-       MOV  A,L
-       CALL OUTIO
-       RST  1
-       DB   ','
-       DB   03H
-       JMP  OUTCMD 
-       RST  6
-WAITCM RST  3
-       MOV  A,L
-       STA  WAITIO + 1
-       RST  1
-       DB   ','
-       DB   1BH
-       RST  3
-       PUSH H
-       RST  1
-       DB   ','
-       DB   7H
-       RST  3
-       MOV  A,L
-       POP  H
-       MOV  H,A
-       JMP  $ + 2
-       MVI  H,0
-       JMP  WAITIO
-INP    CALL PARN
-       MOV  A,L
-       STA  INPIO + 1
-       MVI  H,0
-       JMP  INPIO
-       JMP  QWHAT
-POKE   RST  3
-       PUSH H
-       RST  1
-       DB   ','
-       DB   12H
-       RST  3
-       MOV  A,L
-       POP  H
-       MOV  M,A
-       RST  1
-       DB   ',',03H
-       JMP  POKE
-       RST 6
-PEEK   CALL PARN
-       MOV  L,M
-       MVI  H,0
-       RET
-       JMP  QWHAT
-USR    PUSH B
-       RST  1
-       DB   '(',28D    ;QWHAT
-       RST  3          ;EXPR
-       RST  1
-       DB   ')',7      ;PASPARM
-       PUSH D
-       LXI  D,USRET
-       PUSH D
-       PUSH H
-       RET             ;CALL USR ROUTINE
-PASPRM RST  1
-       DB   ',',14D
-       PUSH H
-       RST  3
-       RST  1
-       DB   ')',9
-       POP  B
-       PUSH D
-       LXI  D,USRET
-       PUSH D
-       PUSH B
-       RET             ;CALL USR ROUTINE
-USRET  POP  D
-       POP  B
-       RET
-       JMP  QWHAT
-;*
-;**************************************************************
-;* 
-;* *** DIVIDE *** SUBDE *** CHKSGN *** CHGSGN *** & CKHLDE *** 
-;* 
-;* 'DIVIDE' DIVIDES HL BY DE, RESULT IN BC, REMAINDER IN HL
-;* 
-;* 'SUBDE' SUBTRACTS DE FROM HL
-;* 
-;* 'CHKSGN' CHECKS SIGN OF HL.  IFF +, NO CHANGE.  IFF -, CHANGE 
-;* SIGN AND FLIP SIGN OF B.
-;* 
-;* 'CHGSGN' CHNGES SIGN OF HL AND B UNCONDITIONALLY. 
-;* 
-;* 'CKHLE' CHECKS SIGN OF HL AND DE.  IFF DIFFERENT, HL AND DE 
-;* ARE INTERCHANGED.  IFF SAME SIGN, NOT INTERCHANGED.  EITHER
-;* CASE, HL DE ARE THEN COMPARED TO SET THE FLAGS. 
-;* 
-DIVIDE PUSH H         ;*** DIVIDE ***
-       MOV  L,H       ;DIVIDE H BY DE
-       MVI  H,0 
-       CALL DV1 
-       MOV  B,C       ;SAVE RESULT IN B
-       MOV  A,L       ;(REMAINDER+L)/DE
-       POP  H 
-       MOV  H,A 
-DV1    MVI  C,377Q    ;RESULT IN C 
-DV2    INR  C         ;DUMB ROUTINE
-       CALL SUBDE     ;DIVIDE BY SUBTRACT
-       JNC  DV2       ;AND COUNT 
-       DAD  D 
-       RET
-;* 
-SUBDE  MOV  A,L       ;*** SUBDE *** 
-       SUB  E         ;SUBTRACT DE FROM
-       MOV  L,A       ;HL
-       MOV  A,H 
-       SBB  D 
-       MOV  H,A 
-       RET
-;* 
-CHKSGN MOV  A,H       ;*** CHKSGN ***
-       ORA  A         ;CHECK SIGN OF HL
-       RP             ;IFF -, CHANGE SIGN 
-;* 
-CHGSGN MOV  A,H       ;*** CHGSGN ***
-       CMA            ;CHANGE SIGN OF HL 
-       MOV  H,A 
-       MOV  A,L 
-       CMA
-       MOV  L,A 
-       INX  H 
-       MOV  A,B       ;AND ALSO FLIP B 
-       XRI  200Q
-       MOV  B,A 
-       RET
-;* 
-CKHLDE MOV  A,H 
-       XRA  D         ;SAME SIGN?
-       JP   CK1       ;YES, COMPARE
-       XCHG           ;NO, XCH AND COMP
-CK1    RST  4 
-       RET
-;* 
-;**************************************************************
-;* 
-;* *** SETVAL *** FIN *** ENDCHK *** & ERROR (& FRIENDS) *** 
-;* 
-;* "SETVAL" EXPECTS A VARIABLE, FOLLOWED BY AN EQUAL SIGN AND
-;* THEN AN EXPR.  IT EVALUATES THE EXPR. AND SET THE VARIABLE
-;* TO THAT VALUE.
-;* 
-;* "FIN" CHECKS THE END OF A COMMAND.  IFF IT ENDED WITH ";", 
-;* EXECUTION CONTINUES.  IFF IT ENDED WITH A CR, IT FINDS THE 
-;* NEXT LINE AND CONTINUE FROM THERE.
-;* 
-;* "ENDCHK" CHECKS IFF A COMMAND IS ENDED WITH CR.  THIS IS 
-;* REQUIRED IN CERTAIN COMMANDS. (GOTO, RETURN, AND STOP ETC.) 
-;* 
-;* "ERROR" PRINTS THE STRING POINTED BY DE (AND ENDS WITH CR). 
-;* IT THEN PRINTS THE LINE POINTED BY 'CURRNT' WITH A "?"
-;* INSERTED AT WHERE THE OLD TEXT POINTER (SHOULD BE ON TOP
-;* O THE STACK) POINTS TO.  EXECUTION OF TB IS STOPPED
-;* AND TBI IS RESTARTED.  HOWEVER, IFF 'CURRNT' -> ZERO 
-;* (INDICATING A DIRECT COMMAND), THE DIRECT COMMAND IS NOT
-;*  PRINTED.  AND IFF 'CURRNT' -> NEGATIVE # (INDICATING 'INPUT'
-;* COMMAND, THE INPUT LINE IS NOT PRINTED AND EXECUTION IS 
-;* NOT TERMINATED BUT CONTINUED AT 'INPERR'. 
-;* 
-;* RELATED TO 'ERROR' ARE THE FOLLOWING: 
-;* 'QWHAT' SAVES TEXT POINTER IN STACK AND GET MESSAGE "WHAT?" 
-;* 'AWHAT' JUST GET MESSAGE "WHAT?" AND JUMP TO 'ERROR'. 
-;* 'QSORRY' AND 'ASORRY' DO SAME KIND OF THING.
-;* 'QHOW' AND 'AHOW' IN THE ZERO PAGE SECTION ALSO DO THIS 
-;* 
-SETVAL RST  7         ;*** SETVAL ***
-       JC   QWHAT     ;"WHAT?" NO VARIABLE 
-       PUSH H         ;SAVE ADDRESS OF VAR.
-       RST  1         ;PASS "=" SIGN 
-       DB   '=' 
-       DB   10Q 
-       RST  3         ;EVALUATE EXPR.
-       MOV  B,H       ;VALUE IN BC NOW 
-       MOV  C,L 
-       POP  H         ;GET ADDRESS 
-       MOV  M,C       ;SAVE VALUE
-       INX  H 
-       MOV  M,B 
-       RET
-SV1    JMP  QWHAT     ;NO "=" SIGN 
-;* 
-FIN    RST  1         ;*** FIN *** 
-       DB   73Q 
-       DB   4Q 
-       POP  PSW       ;";", PURGE RET ADDR.
-       JMP  RUNSML    ;CONTINUE SAME LINE
-FI1    RST  1         ;NOT ";", IS IT CR?
-       DB   0DH
-       DB   4Q 
-       POP  PSW       ;YES, PURGE RET ADDR.
-       JMP  RUNNXL    ;RUN NEXT LINE 
-FI2    RET            ;ELSE RETURN TO CALLER 
-;* 
-ENDCHK RST  5         ;*** ENDCHK ***
-       CPI  0DH       ;END WITH CR?
-       RZ             ;OK, ELSE SAY: "WHAT?" 
-;* 
-QWHAT  PUSH D         ;*** QWHAT *** 
-AWHAT  LXI  D,WHAT    ;*** AWHAT *** 
-ERROR  SUB  A         ;*** ERROR *** 
-       CALL PRTSTG    ;PRINT 'WHAT?', 'HOW?' 
-       POP  D         ;OR 'SORRY'
-       LDAX D         ;SAVE THE CHARACTER
-       PUSH PSW       ;AT WHERE OLD DE ->
-       SUB  A         ;AND PUT A 0 THERE 
-       STAX D 
-       LHLD CURRNT    ;GET CURRENT LINE #
-       PUSH H 
-       MOV  A,M       ;CHECK THE VALUE 
-       INX  H 
-       ORA  M 
-       POP  D 
-       JZ   RSTART    ;IFF ZERO, JUST RERSTART
-       MOV  A,M       ;IFF NEGATIVE,
-       ORA  A 
-       JM   INPERR    ;REDO INPUT
-       CALL PRTLN     ;ELSE PRINT THE LINE 
-       DCX  D         ;UPTO WHERE THE 0 IS 
-       POP  PSW       ;RESTORE THE CHARACTER 
-       STAX D 
-       MVI  A,77Q     ;PRINTt A "?" 
-       RST  2 
-       SUB  A         ;AND THE REST OF THE 
-       CALL PRTSTG    ;LINE
-       JMP  RSTART
-QSORRY PUSH D         ;*** QSORRY ***
-ASORRY LXI  D,SORRY   ;*** ASORRY ***
-       JMP  ERROR 
-;* 
-;**************************************************************
-;* 
-;* *** GETLN *** FNDLN (& FRIENDS) *** 
-;* 
-;* 'GETLN' READS A INPUT LINE INTO 'BUFFER'.  IT FIRST PROMPT
-;* THE CHARACTER IN A (GIVEN BY THE CALLER), THEN IT FILLS THE 
-;* THE BUFFER AND ECHOS.  IT IGNORES LF'S AND NULLS, BUT STILL 
-;* ECHOS THEM BACK.  RUB-OUT IS USED TO CAUSE IT TO DELETE 
-;* THE LAST CHARATER (IFF THERE IS ONE), AND ALT-MOD IS USED TO 
-;* CAUSE IT TO DELETE THE WHOLE LINE AND START IT ALL OVER.
-;* 0DHSIGNALS THE END OF A LINE, AND CAUE 'GETLN' TO RETURN.
-;* 
-;* 'FNDLN' FINDS A LINE WITH A GIVEN LINE # (IN HL) IN THE 
-;* TEXT SAVE AREA.  DE IS USED AS THE TEXT POINTER.  IFF THE
-;* LINE IS FOUND, DE WILL POINT TO THE BEGINNING OF THAT LINE
-;* (I.E., THE LOW BYTE OF THE LINE #), AND FLAGS ARE NC & Z. 
-;* IFF THAT LINE IS NOT THERE AND A LINE WITH A HIGHER LINE # 
-;* IS FOUND, DE POINTS TO THERE AND FLAGS ARE NC & NZ.  IFF 
-;* WE REACHED THE END OF TEXT SAVE ARE AND CANNOT FIND THE 
-;* LINE, FLAGS ARE C & NZ. 
-;* 'FNDLN' WILL INITIALIZE DE TO THE BEGINNING OF THE TEXT SAVE
-;* AREA TO START THE SEARCH.  SOME OTHER ENTRIES OF THIS 
-;* ROUTINE WILL NOT INITIALIZE DE AND DO THE SEARCH. 
-;* 'FNDLNP' WILL START WITH DE AND SEARCH FOR THE LINE #.
-;* 'FNDNXT' WILL BUMP DE BY 2, FIND A 0DHAND THEN START SEARCH.
-;* 'FNDSKP' USE DE TO FIND A CR, AND THEN STRART SEARCH. 
-;* 
-GETLN  RST  2         ;*** GETLN *** 
-       LXI  D,BUFFER  ;PROMPT AND INIT
-GL1    CALL CHKIO     ;CHECK KEYBOARD
-       JZ   GL1       ;NO INPUT, WAIT
-       CPI  177Q      ;DELETE LST CHARACTER?
-       JZ   GL3       ;YES 
-       CPI  12Q       ;IGNORE LF 
-       JZ   GL1 
-       ORA  A         ;IGNORE NULL 
-       JZ   GL1 
-       CPI  134Q      ;DELETE THE WHOLE LINE?
-       JZ   GL4       ;YES 
-       STAX D         ;ELSE, SAVE INPUT
-       INX  D         ;AND BUMP POINTER
-       CPI  15Q       ;WAS IT CR?
-       JNZ  GL2       ;NO
-       MVI  A,12Q     ;YES, GET LINE FEED
-       RST  2         ;CALL OUTC AND LINE FEED
-       RET            ;WE'VE GOT A LINE
-GL2    MOV  A,E       ;MORE FREE ROOM?
-       CPI  BUFEND AND 0FFH
-       JNZ  GL1       ;YES, GET NEXT INPUT 
-GL3    MOV  A,E       ;DELETE LAST CHARACTER 
-       CPI  BUFFER AND 0FFH    ;BUT DO WE HAVE ANY? 
-       JZ   GL4       ;NO, REDO WHOLE LINE 
-       DCX  D         ;YES, BACKUP POINTER 
-       MVI  A,'_'     ;AND ECHO A BACK-SPACE 
-       RST  2 
-       JMP  GL1       ;GO GET NEXT INPUT 
-GL4    CALL CRLF      ;REDO ENTIRE LINE
-       MVI  A,136Q    ;CR, LF AND UP-ARROW 
-       JMP  GETLN 
-;* 
-FNDLN  MOV  A,H       ;*** FNDLN *** 
-       ORA  A         ;CHECK SIGN OF HL
-       JM   QHOW      ;IT CANNT BE -
-       LXI  D,TXTBGN  ;INIT. TEXT POINTER
-;* 
-FNDLNP EQU  $         ;*** FNDLNP ***
-FL1    PUSH H         ;SAVE LINE # 
-       LHLD TXTUNF    ;CHECK IFF WE PASSED END
-       DCX  H 
-       RST  4 
-       POP  H         ;GET LINE # BACK 
-       RC             ;C,NZ PASSED END 
-       LDAX D         ;WE DID NOT, GET BYTE 1
-       SUB  L         ;IS THIS THE LINE? 
-       MOV  B,A       ;COMPARE LOW ORDER 
-       INX  D 
-       LDAX D         ;GET BYTE 2
-       SBB  H         ;COMPARE HIGH ORDER
-       JC   FL2       ;NO, NOT THERE YET 
-       DCX  D         ;ELSE WE EITHER FOUND
-       ORA  B         ;IT, OR IT IS NOT THERE
-       RET            ;NC,Z:FOUND; NC,NZ:NO
-;* 
-FNDNXT EQU  $         ;*** FNDNXT ***
-       INX  D         ;FIND NEXT LINE
-FL2    INX  D         ;JUST PASSED BYTE 1 & 2
-;* 
-FNDSKP LDAX D         ;*** FNDSKP ***
-       CPI  0DH       ;TRY TO FIND 0DH
-       JNZ  FL2       ;KEEP LOOKING
-       INX  D         ;FOUND CR, SKIP OVER 
-       JMP  FL1       ;CHECK IFF END OF TEXT
-;* 
-;*************************************************************
-;* 
-;* *** PRTSTG *** QTSTG *** PRTNUM *** & PRTLN *** 
-;* 
-;* 'PRTSTG' PRINTS A STRING POINTED BY DE.  IT STOPS PRINTING
-;* AND RETURNS TO CALÌER WHEN EITHER A 0DHIS PRINTED OR WHEN 
-;* THE NEXT BYTE IS THE SAME AS WHAT WAS IN A (GIVEN BY THE
-;* CALLER).  OLD A IS STORED IN B, OLD B IS LOST.
-;* 
-;* 'QTSTG' LOOKS FOR A BACK-ARROW, SINGLE QUOTE, OR DOUBLE 
-;* QUOTE.  IFF NONE OF THESE, RETURN TO CALLER.  IFF BACK-ARROW, 
-;* OUTPUT A 0DHWITHOUT A LF.  IFF SINGLE OR DOUBLE QUOTE, PRINT 
-;* THE STRING IN THE QUOTE AND DEMANDS A MATCHING UNQUOTE. 
-;* AFTER THE PRINTING THE NEXT 3 BYTES OF THE CALLER IS SKIPPED
-;* OVER (USUALLY A JUMP INSTRUCTION).
-;* 
-;* 'PRTNUM' PRINTS THE NUMBER IN HL.  LEADING BLANKS ARE ADDED 
-;* IFF NEEDED TO PAD THE NUMBER OF SPACES TO THE NUMBER IN C. 
-;* HOWEVER, IFF THE NUMBER OF DIGITS IS LARGER THAN THE # IN
-;* C, ALL DIGITS ARE PRINTED ANYWAY.  NEGATIVE SIGN IS ALSO
-;* PRINTED AND COUNTED IN, POSITIVE SIGN IS NOT. 
-;* 
-;* 'PRTLN' PRINSrA SAVED TEXT LINE WITH LINE # AND ALL. 
-;* 
-PRTSTG MOV  B,A       ;*** PRTSTG ***
-PS1    LDAX D         ;GET A CHARACTERr 
-       INX  D         ;BUMP POINTER
-       CMP  B         ;SAME AS OLD A?
-       RZ             ;YES, RETURN 
-       RST  2         ;ELSE PRINT IT 
-       CPI  0DH       ;WAS IT A CR?
-       JNZ  PS1       ;NO, NEXT
-       RET            ;YES, RETURN 
-;* 
-QTSTG  RST  1         ;*** QTSTG *** 
-       DB   '"' 
-       DB   17Q 
-       MVI  A,42Q     ;IT IS A " 
-QT1    CALL PRTSTG    ;PRINT UNTIL ANOTHER 
-       CPI  0DH       ;WAS LAST ONE A CR?
-       POP  H         ;RETURN ADDRESS
-       JZ   RUNNXL    ;WAS CR, RUN NEXT LINE 
-QT2    INX  H         ;SKIP 3 BYTES ON RETURN
-       INX  H 
-       INX  H 
-       PCHL           ;RETURN
-QT3    RST  1         ;IS IT A ' ? 
-       DB   47Q 
-       DB   5Q
-       MVI  A,47Q     ;YES, DO SAME
-       JMP  QT1       ;AS IN " 
-QT4    RST  1         ;IS IT BACK-ARROW? 
-       DB   137Q
-       DB   10Q 
-       MVI  A,215Q    ;YES, 0DHWITHOUT LF!!
-       RST  2         ;DO IT TWICE TO GIVE 
-       RST  2         ;TTY ENOUGH TIME 
-       POP  H         ;RETURN ADDRESS
-       JMP  QT2 
-QT5    RET            ;NONE OF ABOVE 
-;* 
-PRTNUM PUSH D         ;*** PRTNUM ***
-       LXI  D,12Q     ;DECIMAL 
-       PUSH D         ;SAVE AS A FLAG
-       MOV  B,D       ;B=SIGN
-       DCR  C         ;C=SPACES
-       CALL CHKSGN    ;CHECK SIGN
-       JP   PN1       ;NO SIGN 
-       MVI  B,55Q     ;B=SIGN
-       DCR  C         ;'-' TAKES SPACE 
-PN1    PUSH B         ;SAVE SIGN & SPACE 
-PN2    CALL DIVIDE    ;DEVIDE HL BY 10 
-       MOV  A,B       ;RESULT 0? 
-       ORA  C 
-       JZ   PN3       ;YES, WE GOT ALL 
-       XTHL           ;NO, SAVE REMAINDER
-       DCR  L         ;AND COUNT SPACE 
-       PUSH H         ;HL IS OLD BC
-       MOV  H,B       ;MOVE RESULT TO BC 
-       MOV  L,C 
-       JMP  PN2       ;AND DIVIDE BY 10
-PN3    POP  B         ;WE GOT ALL DIGITS IN
-PN4    DCR  C         ;THE STACK 
-       MOV  A,C       ;LOOK AT SPACE COUNT 
-       ORA  A 
-       JM   PN5       ;NO LEADING BLANKS 
-       MVI  A,40Q     ;LEADING BLANKS
-       RST  2 
-       JMP  PN4       ;MORE? 
-PN5    MOV  A,B       ;PRINT SIGN
-       RST  2         ;MAYBE - OR NULL 
-       MOV  E,L       ;LAST REMAINDER IN E 
-PN6    MOV  A,E       ;CHECK DIGIT IN E
-       CPI  12Q       ;10 IS FLAG FOR NO MORE
-       POP  D 
-       RZ             ;IFF SO, RETURN 
-       ADI  60Q		;ELSE CONVERT TO ASCII
-       RST  2         ;AND PRINT THE DIGIT 
-       JMP  PN6       ;GO BACK FOR MORE
-;* 
-PRTLN  LDAX D         ;*** PRTLN *** 
-       MOV  L,A       ;LOW ORDER LINE #
-       INX  D 
-       LDAX D         ;HIGH ORDER
-       MOV  H,A 
-       INX  D 
-       MVI  C,4Q      ;PRINT 4 DIGIT LINE #
-       CALL PRTNUM
-       MVI  A,40Q     ;FOLLOWED BY A BLANK 
-       RST  2 
-       SUB  A         ;AND THEN THE TEXT 
-       CALL PRTSTG
-       RET
-;* 
-;**************************************************************
-;* 
-;* *** MVUP *** MVDOWN *** POPA *** & PUSHA ***
-;* 
-;* 'MVUP' MOVES A BLOCK UP FROM HERE DE-> TO WHERE BC-> UNTIL 
-;* DE = HL 
-;* 
-;* 'MVDOWN' MOVES A BLOCK DOWN FROM WHERE DE-> TO WHERE HL-> 
-;* UNTIL DE = BC 
-;* 
-;* 'POPA' RESTORES THE 'FOR' LOOP VARIABLE SAVE AREA FROM THE
-;* STACK 
-;* 
-;* 'PUSHA' STACKS THE 'FOR' LOOP VARIABLE SAVE AREA INTO THE 
-;* STACK 
-;* 
-MVUP   RST  4         ;*** MVUP ***
-       RZ             ;DE = HL, RETURN 
-       LDAX D         ;GET ONE BYTE
-       STAX B         ;MOVE IT 
-       INX  D         ;INCREASE BOTH POINTERS
-       INX  B 
-       JMP  MVUP      ;UNTIL DONE
-;* 
-MVDOWN MOV  A,B       ;*** MVDOWN ***
-       SUB  D         ;TEST IFF DE = BC 
-       JNZ  MD1       ;NO, GO MOVE 
-       MOV  A,C       ;MAYBE, OTHER BYTE?
-       SUB  E 
-       RZ             ;YES, RETURN 
-MD1    DCX  D         ;ELSE MOVE A BYTE
-       DCX  H         ;BUT FIRST DECREASE
-       LDAX D         ;BOTH POINTERS AND 
-       MOV  M,A       ;THEN DO IT
-       JMP  MVDOWN    ;LOOP BACK 
-;* 
-POPA   POP  B         ;BC = RETURN ADDR. 
-       POP  H         ;RESTORE LOPVAR, BUT 
-       SHLD LOPVAR    ;=0 MEANS NO MORE
-       MOV  A,H 
-       ORA  L 
-       JZ   PP1       ;YEP, GO RETURN
-       POP  H         ;NOP, RESTORE OTHERS 
-       SHLD LOPINC
-       POP  H 
-       SHLD LOPLMT
-       POP  H 
-       SHLD LOPLN 
-       POP  H 
-       SHLD LOPPT 
-PP1    PUSH B         ;BC = RETURN ADDR. 
-       RET
-;* 
-PUSHA  LXI  H,STKLMT  ;*** PUSHA *** 
-       CALL CHGSGN
-       POP  B         ;BC=RETURN ADDRESS 
-       DAD  SP        ;IS STACK NEAR THE TOP?
-       JNC  QSORRY    ;YES, SORRY FOR THAT.
-       LHLD LOPVAR    ;ELSE SAVE LOOP VAR.S
-       MOV  A,H       ;BUT IFF LOPVAR IS 0
-       ORA  L         ;THAT WILL BE ALL
-       JZ   PU1 
-       LHLD LOPPT     ;ELSE, MORE TO SAVE
-       PUSH H 
-       LHLD LOPLN 
-       PUSH H 
-       LHLD LOPLMT
-       PUSH H 
-       LHLD LOPINC
-       PUSH H 
-       LHLD LOPVAR
-PU1    PUSH H 
-       PUSH B         ;BC = RETURN ADDR. 
-       RET
-;* 
-;**************************************************************
-;* 
-;* *** OUTC *** & CHKIO ****!
-;* THESE ARE THE ONLY I/O ROUTINES IN TBI. 
-;* 'OUTC' IS CONTROLLED BY A SOFTWARE SWITCH 'OCSW'.  IFF OCSW=0
-;* 'OUTC' WILL JUST RETURN TO THE CALLER.  IFF OCSW IS NOT 0, 
-;* IT WILL OUTPUT THE BYTE IN A.  IFF THAT IS A CR, A LF IS ALSO
-;* SEND OUT.  ONLY THE FLAGS MAY BE CHANGED AT RETURN, ALL REG.
-;* ARE RESTORED. 
-;* 
-;* 'CHKIO' CHECKS THE INPUT.  IFF NO INPUT, IT WILL RETURN TO 
-;* THE CALLER WITH THE Z FLAG SET.  IFF THERE IS INPUT, Z FLAG
-;* IS CLEARED AND THE INPUT BYTE IS IN A.  HOWERER, IFF THE 
-;* INPUT IS A CONTROL-O, THE 'OCSW' SWITCH IS COMPLIMENTED, AND
-;* Z FLAG IS RETURNED.  IFF A CONTROL-C IS READ, 'CHKIO' WILL 
-;* RESTART TBI AND DO NOT RETURN TO THE CALLER.
-;* 
-;*                 OUTC   PUSH AF        THIS IS AT LOC. 10
-;*                        LD   A,OCSW    CHECK SOFTWARE SWITCH 
-;*                        IOR  A 
-OC2    JNZ  OC3       ;IT IS ON
-       POP  PSW       ;IT IS OFF 
-       RET            ;RESTORE AF AND RETURN 
-OC3    POP  A         ;GET OLD A BACK
-       PUSH B         ;SAVE B ON STACK
-       PUSH D         ;AND D
-       PUSH H         ;AND H TOO
-       STA  OUTCAR    ;SAVE CHARACTER
-       MOV  E,A       ;PUT CHAR. IN E FOR CPM
-       MVI  C,2       ;GET CONOUT COMMAND
-       CALL CPM       ;CALL CPM AND DO IT
-       LDA  OUTCAR    ;GET CHAR. BACK
-       CPI  0DH       ;WAS IT A 'CR'?
-       JNZ  DONE      ;NO, DONE
-       MVI  E,0AH     ;GET LINEFEED
-       MVI  C,2       ;AND CONOUT AGAIN
-       CALL CPM       ;CALL CPM
-DONE   LDA  OUTCAR    ;GET CHARACTER BACK
-IDONE  POP  H         ;GET H BACK
-       POP  D         ;AND D
-       POP  B         ;AND B TOO
-       RET            ;DONE AT LAST
-CHKIO  PUSH B         ;SAVE B ON STACK
-       PUSH D         ;AND D
-       PUSH H         ;THEN H
-       MVI  C,11      ;GET CONSTAT WORD
-       CALL CPM       ;CALL THE BDOS
-       ORA  A         ;SET FLAGS
-       JNZ  CI1       ;IF READY GET CHARACTER
-       JMP  IDONE     ;RESTORE AND RETURN
-CI1    MVI  C,1       ;GET CONIN WORD
-       CALL CPM       ;CALL THE BDOS
-       CPI  0FH       ;IS IT CONTROL-O?
-       JNZ  CI2       ;NO, MORE CHECKING
-       LDA  OCSW      ;CONTROL-O  FLIP OCSW
-       CMA            ;ON TO OFF, OFF TO ON
-       STA  OCSW      ;AND PUT IT BACK
-       JMP  CHKIO     ;AND GET ANOTHER CHARACTER
-CI2    CPI  3         ;IS IT CONTROL-C?
-       JNZ  IDONE     ;RETURN AND RESTORE IF NOT
-       JMP  RSTART    ;YES, RESTART TBI
-LSTROM EQU  $         ;ALL ABOVE CAN BE ROM
-OUTIO  OUT  0FFH
-       RET
-WAITIO IN   0FFH
-       XRA  H
-       ANA  L
-       JZ   WAITIO
-       RST  6
-INPIO  IN   0FFH
-       MOV  L,A
-       RET
-OUTCAR DB   0         ;OUTPUT CHAR. STORAGE
-OCSW   DB   0FFH      ;SWITCH FOR OUTPUT
-CURRNT DW   0         ;POINTS TO CURRENT LINE
-STKGOS DW   0         ;SAVES SP IN 'GOSUB'
-VARNXT DW   0         ;TEMPORARY STORAGE
-STKINP DW   0         ;SAVES SP IN 'INPUT'
-LOPVAR DW   0         ;'FOR' LOOP SAVE AREA
-LOPINC DW   0         ;INCREMENT
-LOPLMT DW   0         ;LIMIT
-LOPLN  DW   0         ;LINE NUMBER
-LOPPT  DW   0         ;TEXT POINTER
-RANPNT DW   START     ;RANDOM NUMBER POINTER
-TXTUNF DW   TXTBGN    ;->UNFILLED TEXT AREA
-TXTBGN DS   1         ;TEXT SAVE AREA BEGINS 
-MSG1   DB   7FH,7FH,7FH,'SHERRY BROTHERS TINY BASIC VER. 3.1',0DH 
-INIT   MVI  A,0FFH
-       STA  OCSW      ;TURN ON OUTPUT SWITCH 
-       MVI  A,0CH     ;GET FORM FEED 
-       RST  2         ;SEND TO CRT 
-PATLOP SUB  A         ;CLEAR ACCUMULATOR
-       LXI  D,MSG1    ;GET INIT MESSAGE
-       CALL PRTSTG    ;SEND IT
-LSTRAM LDA  7         ;GET FBASE FOR TOP
-       STA  RSTART+2
-       DCR  A         ;DECREMENT FOR OTHER POINTERS
-       STA  SS1A+2    ;AND FIX THEM TOO
-       STA  TV1A+2
-       STA  ST3A+2
-       STA  ST4A+2
-       STA  IP3A+2
-       STA  SIZEA+2
-       STA  GETLN+3
-       STA  PUSHA+2
-       LXI  H,ST1     ;GET NEW START JUMP
-       SHLD START+1   ;AND FIX IT
-       JMP  ST1
-;	RESTART TABLE
-	ORG	0A50H
-RSTBL:
-       XTHL           ;*** TSTC OR RST 1 *** 
-       RST  5         ;IGNORE BLANKS AND 
-       CMP  M         ;TEST CHARACTER
-       JMP  TC1       ;REST OF THIS IS AT TC1
-;* 
-CRLF:	EQU	0EH	;EXECUTE TIME LOCATION OF THIS INSTRUCTION.
-	MVI  A,0DH     ;*** CRLF ***
-;* 
-       PUSH PSW       ;*** OUTC OR RST 2 *** 
-       LDA  OCSW      ;PRINT CHARACTER ONLY
-       ORA  A         ;IFF OCSW SWITCH IS ON
-       JMP  OC2       ;REST OF THIS IS AT OC2
-;* 
-       CALL EXPR2     ;*** EXPR OR RST 3 *** 
-       PUSH H         ;EVALUATE AN EXPRESION 
-       JMP  EXPR1     ;REST OF IT IS AT EXPR1
-       DB   'W' 
-;* 
-       MOV  A,H       ;*** COMP OR RST 4 *** 
-       CMP  D         ;COMPARE HL WITH DE
-       RNZ            ;RETURN CORRECT C AND
-       MOV  A,L       ;Z FLAGS 
-       CMP  E         ;BUT OLD A IS LOST 
-       RET
-       DB   'AN'
-;* 
-SS1:	EQU	28H	;EXECUTE TIME LOCATION OF THIS INSTRUCTION.
-	LDAX D         ;*** IGNBLK/RST 5 ***
-       CPI  40Q       ;IGNORE BLANKS 
-       RNZ            ;IN TEXT (WHERE DE->)
-       INX  D         ;AND RETURN THE FIRST
-       JMP  SS1       ;NON-BLANK CHAR. IN A
-;* 
-       POP  PSW       ;*** FINISH/RST 6 ***
-       CALL FIN       ;CHECK END OF COMMAND
-       JMP  QWHAT     ;PRINT "WHAT?" IFF WRONG
-       DB   'G' 
-;* 
-       RST  5         ;*** TSTV OR RST 7 *** 
-       SUI  100Q      ;TEST VARIABLES
-       RC             ;C:NOT A VARIABLE
-       JMP  TSTV1     ;JUMP AROUND RESERVED AREA
-; ROUTINE TO COPY RESTART TABLE INTO LOW MEMORY
-RST1:	EQU	8	;LOCATION FIRST REATART ROUTINE
-
-EOT:	EQU	40H	;LAST LOC TO BE FILLED
-
-	ORG	0AA0H
-NINIT:	LXI	H,RST1		;POINT TO BEGINNING OF MODEL TABLE
-	LXI	D,RSTBL
-NXT:	LDAX	D
-	MOV	M,A
-	INX	H
-	INX	D
-	MVI	A,EOT
-	CMP	L
-	JNZ	NXT
-	LXI	H,INIT
-	SHLD	START+1
-	JMP	START
-       ORG  0F00H
-TXTEND EQU  $         ;TEXT SAVE AREA ENDS 
-VARBGN DS   2*27      ;VARIABLE @(0)
-       DS   1         ;EXTRA BYTE FOR BUFFER
-BUFFER DS   80        ;INPUT BUFFER
-BUFEND EQU  $         ;BUFFER ENDS
-       DS   40        ;EXTRA BYTES FOR STACK
-STKLMT EQU  $         ;TOP LIMIT FOR STACK
-       ORG  2000H
-STACK  EQU  $         ;STACK STARTS HERE
-       END
+!**************************************************************
+!* 
+!*                tiny basic for intel 8080
+!*                      version 1.0
+!*                    by li-chen wang
+!*                     10 june, 1976 
+!*                       @copyleft 
+!*                  all wrongs reserved
+!* 
+!**************************************************************
+!* 
+!*  !*** zero page subroutines ***
+!* 
+!*  the 8080 instruction set lets you have 8 routines in low 
+!*  memory that may be called by rst n, n being 0 through 7. 
+!*  this is a one byte instruction and has the same power as 
+!*  the three byte instruction call llhh.  tiny basic will 
+!*  use rst 0 as start and rst 1 through rst 7 for 
+!*  the seven most frequently used subroutines.
+!*  two other subroutines (crlf and tstnum) are also in this 
+!*  section.  they can be reached only by 3-byte calls.
+!
+! Note: this version was extensively damaged to adapt to CP/M,
+! I am attempting to find other copies to reference to in order
+! to correct it.
+!
+!* 
+       jmp  ninit     ! go main start
+       alignp 8
+*
+       xthl           !*** tstc or rst 1 *** 
+       rst  5         !ignore blanks and 
+       cmp  m         !test character
+       jmp  tc1       !rest of this is at tc1
+* 
+crlf:  mvi  a,0dh     !*** crlf ***
+* 
+       push psw       !*** outc or rst 2 *** 
+       lda  ocsw      !print character only
+       ora  a         !iff ocsw switch is on
+       jmp  oc2       !rest of this is at oc2
+* 
+       call expr2     !*** expr or rst 3 *** 
+       push h         !evaluate an expresion 
+       jmp  expr1     !rest of it is at expr1
+       defb 'w' 
+* 
+       mov  a,h       !*** comp or rst 4 *** 
+       cmp  d         !compare hl with de
+       rnz            !return correct c and
+       mov  a,l       !z flags 
+       cmp  e         !but old a is lost 
+       ret
+       defb 'an'
+* 
+ss1:   ldax d         !*** ignblk/rst 5 ***
+       cpi  40q       !ignore blanks 
+       rnz            !in text (where de->)
+       inx  d         !and return the first
+       jmp  ss1       !non-blank char. in a
+* 
+       pop  psw       !*** finish/rst 6 ***
+       call fin       !check end of command
+       jmp  qwhat     !print "what?" iff wrong
+       defb 'g' 
+* 
+       rst  5         !*** tstv or rst 7 *** 
+       sui  100q      !test variables
+       rc             !c:not a variable
+*
+tstv1: jnz  tv1       !not "@" array 
+       inx  d         !it is the "@" array 
+       call parn      !@ should be followed
+       dad  h         !by (expr) as its index
+       jc   qhow      !is index too big? 
+       push d         !will it overwrite 
+       xchg           !text? 
+       call size      !find size of free 
+       rst  4         !and check that
+       jc   asorry    !iff so, say "sorry"
+ss1a:  lxi  h,varbgn  !iff not, get address 
+       call subde     !of @(expr) and put it 
+       pop  d         !in hl 
+       ret            !c flag is cleared 
+tv1:   cpi  33q       !not @, is it a to z?
+       cmc            !iff not return c flag
+       rc 
+       inx  d         !iff a through z
+tv1a:  lxi  h,varbgn  !compute address of
+       rlc            !that variable 
+       add  l         !and return it in hl 
+       mov  l,a       !with c flag cleared 
+       mvi  a,0 
+       adc  h 
+       mov  h,a 
+       ret
+!* 
+!*                 tstc   xch  hl,(sp)   !*** tstc or rst 1 *** 
+!*                        ignblk         this is at loc. 8 
+!*                        cmp  m         and then jmp here 
+tc1:   inx  h         !compare the byte that 
+       jz   tc2       !follows the rst inst. 
+       push b         !with the text (de->)
+       mov  c,m       !iff not =, add the 2nd 
+       mvi  b,0       !byte that follows the 
+       dad  b         !rst to the old pc 
+       pop  b         !i.e., do a relative 
+       dcx  d         !jump iff not = 
+tc2:   inx  d         !iff =, skip those bytes
+       inx  h         !and continue
+       xthl 
+       ret
+!* 
+tstnum:lxi  h,0       !*** tstnum ***
+       mov  b,h       !test iff the text is 
+       rst  5         !a number
+tn1:   cpi  60q       !iff not, return 0 in 
+       rc             !b and hl
+       cpi  72q       !iff numbers, convert 
+       rnc            !to binary in hl and 
+       mvi  a,360q    !set a to # of digits
+       ana  h         !iff h>255, there is no 
+       jnz  qhow      !room for next digit 
+       inr  b         !b counts # of digits
+       push b 
+       mov  b,h       !hl=10!*hl+(new digit)
+       mov  c,l 
+       dad  h         !where 10!* is done by
+       dad  h         !shift and add 
+       dad  b 
+       dad  h 
+       ldax d         !and (digit) is from 
+       inx  d         !stripping the ascii 
+       ani  17q       !code
+       add  l 
+       mov  l,a 
+       mvi  a,0 
+       adc  h 
+       mov  h,a 
+       pop  b 
+       ldax d         !do this digit after 
+       jp   tn1       !digit. s says overflow
+qhow:  push d         !*** error: "how?" *** 
+ahow:  lxi  d,how 
+       jmp  error 
+how:   defb 'how?',0dh 
+ok:    defb 'ok',0dh 
+what:  defb 'what?',0dh 
+sorry: defb 'sorry',0dh 
+!* 
+!**************************************************************
+!* 
+!* *** main ***
+!* 
+!* this is the main loop that collects the tiny basic program
+!* and stores it in the memory.
+!* 
+!* at start, it prints out "(cr)ok(cr)", and initializes the 
+!* stack and some other internal variables.  then it prompts 
+!* ">" and reads a line.  iff the line starts with a non-zero 
+!* number, this number is the line number.  the line number
+!* (in 16 bit binary) and the rest of the line (including cr)
+!* is stored in the memory.  iff a line with the same line
+!* number is alredy there, it is replaced by the new one.  if
+!* the rest of the line consists of a 0dhonly, it is not stored
+!* and any existing line with the same line number is deleted. 
+!* 
+!* after a line iss inserted, replaced, or deleted, the program 
+!* loops back and ask for another line.  this loop will be 
+!* terminated when it reads a line with zero or no line
+!* number! and control is transfered to "dirct".
+!* 
+!* tiny basic program save area starts at the memory location
+!* labeled "txtbgn" and ended at "txtend".  we always fill this
+!* area starting at "txtbgn", the unfilled portion is pointed
+!* by the content of a memory location labeled "txtunf". 
+!* 
+!* the memory location "currnt" points to the line number
+!* that is currently being interpreted.  while we are in 
+!* this loop or while we are interpreting a direct command 
+!* (see next section), "currnt" should point to a 0. 
+!* 
+rstart:lxi  sp,stack  !set stack pointer
+st1:   call crlf      !and jump to here
+       lxi  d,ok      !de->string
+       sub  a         !a=0 
+       call prtstg    !print string until 0dh
+       lxi  h,st2+1   !literal 0 
+       shld currnt    !currnt->line # = 0
+st2:   lxi  h,0 
+       shld lopvar
+       shld stkgos
+st3:   mvi  a,76q     !prompt '>' and
+       call getln     !read a line 
+       push d         !de->end of line 
+st3a:  lxi  d,buffer  !de->beginning of line 
+       call tstnum    !test iff it is a number
+       rst  5 
+       mov  a,h       !hl=value of the # or
+       ora  l         !0 iff no # was found 
+       pop  b         !bc->end of line 
+       jz   direct
+       dcx  d         !backup de and save
+       mov  a,h       !value of line # there 
+       stax d 
+       dcx  d 
+       mov  a,l 
+       stax d 
+       push b         !bc,de->begin, end 
+       push d 
+       mov  a,c 
+       sub  e 
+       push psw       !a=# of bytes in line
+       call fndln     !find this line in save
+       push d         !area, de->save area 
+       jnz  st4       !nz:not found, insert
+       push d         !z:found, delete it
+       call fndnxt    !find next line
+!*                                       de->next line 
+       pop  b         !bc->line to be deleted
+       lhld txtunf    !hl->unfilled save area
+       call mvup      !move up to delete 
+       mov  h,b       !txtunf->unfilled area 
+       mov  l,c 
+       shld txtunf    !update
+st4:   pop  b         !get ready to insert 
+       lhld txtunf    !but firt check if
+       pop  psw       !the length of new line
+       push h         !is 3 (line # and cr)
+       cpi  3         !then do not insert
+       jz   rstart    !must clear the stack
+       add  l         !compute new txtunf
+       mov  l,a 
+       mvi  a,0 
+       adc  h 
+       mov  h,a       !hl->new unfilled area 
+st4a:  lxi  d,txtend  !check to see if there 
+       rst  4         !is enough space 
+       jnc  qsorry    !sorry, no room for it 
+       shld txtunf    !ok, update txtunf 
+       pop  d         !de->old unfilled area 
+       call mvdown
+       pop  d         !de->begin, hl->end
+       pop  h 
+       call mvup      !move new line to save 
+       jmp  st3       !area
+!* 
+!**************************************************************
+!* 
+!* *** tables *** direct *** & exec ***
+!* 
+!* this section of the code tests a string against a table.
+!* when a match is found, control is transfered to the section 
+!* of code according to the table. 
+!* 
+!* at 'exec', de should point to the string ad hl should point
+!* to the table-1.  at 'direct', de should point to the string,
+!* hl will be set up to point to tab1-1, which is the table of 
+!* all direct and statement commands.
+!* 
+!* a '.' in the string will terminate the test and the partial 
+!* match will be considered as a match.  e.g., 'p.', 'pr.',
+!* 'pri.', 'prin.', or 'print' will all match 'print'. 
+!* 
+!* the table consists of any number of items.  each item 
+!* is a string of characters with bit 7 set to 0 and 
+!* a jump address stored hi-low with bit 7 of the high 
+!* byte set to 1.
+!* 
+!* end of table is an item with a jump address only.  iff the 
+!* string does not match any of the other items, it will 
+!* match this null item as default.
+!* 
+tab1:  equ  $         !direct commands 
+       defb 'list'
+       defb list shr 8 + 128,list and 0ffh
+       defb 'run'
+       defb run shr 8 + 128,run and 255
+       defb 'new'
+       defb new shr 8 + 128,new and 255
+       defb 'load'
+       defb dload shr 8 + 128,dload and 255
+       defb 'save'
+       defb dsave shr 8 + 128,dsave and 255
+       defb 'bye',80h,0h   !go back to cpm
+tab2:  equ  $         !direct/tatement
+       defb 'next'
+       defb next shr 8 + 128,next and 255
+       defb 'let'
+       defb let shr 8 + 128,let and 255
+       defb 'out'
+       defb outcmd shr 8 + 128,outcmd and 255 
+       defb 'poke'
+       defb poke shr 8 + 128,poke and 255
+       defb 'wait'
+       defb waitcm shr 8 + 128,waitcm and 255
+       defb 'if'
+       defb iff shr 8 + 128,iff and 255
+       defb 'goto'
+       defb goto shr 8 + 128,goto and 255
+       defb 'gosub'
+       defb gosub shr 8 + 128,gosub and 255
+       defb 'return'
+       defb return shr 8 + 128,return and 255
+       defb 'rem'
+       defb rem shr 8 + 128,rem and 255
+       defb 'for'
+       defb for shr 8 + 128,for and 255
+       defb 'input'
+       defb input shr 8 + 128,input and 255
+       defb 'print'
+       defb print shr 8 + 128,print and 255
+       defb 'stop'
+       defb stop shr 8 + 128,stop and 255
+       defb deflt shr 8 + 128,deflt and 255
+       defb 'you can add more' !commands but
+            !remember to move default down.
+tab4:  equ  $         !functions 
+       defb 'rnd'
+       defb rnd shr 8 + 128,rnd and 255
+       defb 'inp'
+       defb inp shr 8 + 128,inp and 255
+       defb 'peek'
+       defb peek shr 8 + 128,peek and 255
+       defb 'usr'
+       defb usr shr 8 + 128,usr and 255
+       defb 'abs'
+       defb abs shr 8 + 128,abs and 255
+       defb 'size'
+       defb size shr 8 + 128,size and 255
+       defb xp40 shr 8 + 128,xp40 and 255
+       defb 'you can add more' !functions but remember
+                      !to move xp40 down
+tab5:  equ  $         !"to" in "for" 
+       defb 'to'
+       defb fr1 shr 8 + 128,fr1 and 255
+       defb qwhat shr 8 + 128,qwhat and 255
+tab6:  equ  $         !"step" in "for" 
+       defb 'step'
+       defb fr2 shr 8 + 128,fr2 and 255
+       defb fr3 shr 8 + 128,fr3 and 255
+tab8:  equ  $         !relation operators
+       defb '>='
+       defb xp11 shr 8 + 128,xp11 and 255
+       defb '#'
+       defb xp12 shr 8 + 128,xp12 and 255
+       defb '>'
+       defb xp13 shr 8 + 128,xp13 and 255
+       defb '='
+       defb xp15 shr 8 + 128,xp15 and 255
+       defb '<='
+       defb xp14 shr 8 + 128,xp14 and 255
+       defb '<'
+       defb xp16 shr 8 + 128,xp16 and 255
+       defb xp17 shr 8 + 128,xp17 and 255
+!* 
+direct:lxi  h,tab1-1  !*** direct ***
+!* 
+exec:  equ  $         !*** exec ***
+ex0:   rst  5         !ignore leading blanks 
+       push d         !save pointer
+ex1:   ldax d         !iff found '.' in string
+       inx  d         !before any mismatch 
+       cpi  56q       !we declare a match
+       jz   ex3 
+       inx  h         !hl->table 
+       cmp  m         !iff match, test next 
+       jz   ex1 
+       mvi  a,177q    !else, see iff bit 7
+       dcx  d         !of tableis set, which
+       cmp  m         !is the jump addr. (hi)
+       jc   ex5       !c:yes, matched
+ex2:   inx  h         !nc:no, find jump addr.
+       cmp  m 
+       jnc  ex2 
+       inx  h         !bump to next tab. item
+       pop  d         !restore string pointer
+       jmp  ex0       !test against next item
+ex3:   mvi  a,177q    !partial match, find 
+ex4:   inx  h         !jump addr., which is
+       cmp  m         !flagged by bit 7
+       jnc  ex4 
+ex5:   mov  a,m       !load hl with the jump 
+       inx  h         !address from the table
+       mov  l,m 
+       ani  177q      !mask off bit 7
+       mov  h,a 
+       pop  psw       !clean up the gabage 
+       pchl           !and we go do it 
+!* 
+!**************************************************************
+!* 
+!* what follows is the code to execute direct and statement
+!* commands.  control is transfered to these points via the
+!* command table lookup code of 'direct' and 'exec' in last
+!* section.  after the command is executed, control is 
+!* tansfered to other sections as follows:
+!* 
+!* for 'list', 'new', and 'stop': go back to 'rstart'
+!* for 'run': go execute the first stored line iff any! else
+!* go back to 'rstart'.
+!* for 'goto' and 'gosub': go execute the target line. 
+!* for 'return' and 'next': go back to saved return line.
+!* for all others: iff 'currnt' -> 0, go to 'rstart', else
+!* go execute next command.  (this is done in 'finish'.) 
+!* 
+!**************************************************************
+!* 
+!* *** new *** stop *** run (& friends) *** & goto *** 
+!* 
+!* 'new(cr)' sets 'txtunf' to point to 'txtbgn'
+!* 
+!* 'stop(cr)' goes back to 'rstart'
+!* 
+!* 'run(cr)' finds the first stored line, store its address (in
+!* 'currnt'), and start execute it.  note that only those
+!* commands in tab2 are legal for stored program.
+!* 
+!* there are 3 more entries in 'run':
+!* 'runnxl' finds next line, stores its addr. and executes it. 
+!* 'runtsl' stores the address of this line and executes it. 
+!* 'runsml' continues the execution on same line.
+!* 
+!* 'goto expr(cr)' evaluates the expression, find the target 
+!* line, and jump to 'runtsl' to do it.
+!* 'dload' loads a named program from disk.
+!* 'dsave' saves a named program on disk.
+!* 'fcbset' sets up the file control block for subsequent disk i/o.
+!* 
+new:   call endchk    !*** new(cr) *** 
+       lxi  h,txtbgn
+       shld txtunf
+!* 
+stop:  call endchk    !*** stop(cr) ***
+       jmp rstart
+!* 
+run:   call endchk    !*** run(cr) *** 
+       lxi  d,txtbgn  !first saved line
+!* 
+runnxl:lxi  h,0       !*** runnxl ***
+       call fndlnp    !find whatever line #
+       jc   rstart    !c:passed txtunf, quit 
+!* 
+runtsl:xchg           !*** runtsl ***
+       shld currnt    !set 'currnt'->line #
+       xchg 
+       inx  d         !bump pass line #
+       inx  d 
+!* 
+runsml:call chkio     !*** runsml ***
+       lxi  h,tab2-1  !find command in tab2
+       jmp  exec      !and execute it
+!* 
+goto:  rst  3         !*** goto expr *** 
+       push d         !save for error routine
+       call endchk    !must find a 0dh
+       call fndln     !find the target line
+       jnz  ahow      !no such line #
+       pop  psw       !clear the "push de" 
+       jmp  runtsl    !go do it
+cpm:   equ  5         !disk parameters
+fcb:   equ  5ch
+setdma:equ  26
+open:  equ  15
+readd: equ  20
+writed:equ  21
+close: equ  16
+make:  equ  22
+delete:equ  19
+!*
+dload: rst  5         !ignore blanks
+       push h         !save h
+       call fcbset    !set up file control block
+       push d         !save the rest
+       push b         
+       lxi  d,fcb     !get fcb address
+       mvi  c,open    !prepare to open file
+       call cpm       !open it
+       cpi  0ffh      !is it there?
+       jz   qhow      !no, send error
+       xra  a         !clear a
+       sta  fcb+32    !start at record 0
+       lxi  d,txtunf  !get beginning
+load:  push d         !save dma address
+       mvi  c,setdma  !
+       call cpm       !set dma address
+       mvi  c,readd   !
+       lxi  d,fcb
+       call cpm       !read sector
+       cpi  1         !done?
+       jc   rdmore    !no, read more
+       jnz  qhow      !bad read
+       mvi  c,close
+       lxi  d,fcb 
+       call cpm       !close file
+       pop  d         !throw away dma add.
+       pop  b         !get old registers back
+       pop  d
+       pop  h
+       rst  6         !finish
+rdmore:pop  d         !get dma address
+       lxi  h,80h     !get 128
+       dad  d         !add 128 to dma add.
+       xchg           !put it back in d
+       jmp  load      !and read some more
+!*
+dsave: rst  5         !ignore blanks
+       push h         !save h
+       call fcbset    !setup fcb
+       push d
+       push b         !save others
+       lxi  d,fcb
+       mvi  c,delete
+       call cpm       !erase file if it exists
+       lxi  d,fcb  
+       mvi  c,make
+       call cpm       !make a new one
+       cpi  0ffh      !is there space?
+       jz   qhow      !no, error
+       xra  a         !clear a
+       sta  fcb+32    !start at record 0
+       lxi  d,txtunf  !get beginning
+save:  push d         !save dma address
+       mvi  c,setdma  !
+       call cpm       !set dma address
+       mvi  c,writed
+       lxi  d,fcb 
+       call cpm       !write sector
+       ora  a         !set flags
+       jnz  qhow      !if not zero, error
+       pop  d         !get dma add. back
+       lda  txtunf+1  !and msb of last add.
+       cmp  d         !is d smaller?
+       jc   savdon    !yes, done
+       jnz  writmor   !dont test e if not equal
+       lda  txtunf    !is e smaller?
+       cmp  e
+       jc   savdon    !yes, done
+writmor:lxi  h,80h 
+       dad  d         !add 128 to dma add.
+       xchg           !get it back in d
+       jmp  save      !write some more
+savdon:mvi  c,close
+       lxi  d,fcb 
+       call cpm       !close file
+       pop  b         !get registers back
+       pop  d
+       pop  h
+       rst  6         !finish
+!*
+fcbset:lxi  h,fcb     !get file control block address
+       mvi  m,0       !clear entry type
+fnclr: inx  h         !next location
+       mvi  m,' '     !clear to space
+       mvi  a,fcb+8 and 255
+       cmp  l         !done?
+       jnz  fnclr     !no, do it again
+       inx  h         !next
+       mvi  m,'t'     !set file type to 'tbi'
+       inx  h
+       mvi  m,'b'
+       inx  h
+       mvi  m,'i'
+exrc:  inx  h         !clear rest of fcb
+       mvi  m,0
+       mvi  a,fcb+15 and 255
+       cmp  l         !done?
+       jnz  exrc      !no, continue
+       lxi  h,fcb+1   !get filename start
+fn:    ldax d         !get character
+       cpi  0dh       !is it a 'cr'
+       rz             !yes, done
+       cpi  '!'       !legal character?
+       jc   qwhat     !no, send error
+       cpi  '['       !again
+       jnc  qwhat     !ditto
+       mov  m,a        !save it in fcb
+       inx  h         !next
+       inx  d
+       mvi  a,fcb+9 and 255
+       cmp  l         !last?
+       jnz  fn        !no, continue
+       ret            !truncate at 8 characters
+!* 
+!************************************************************* 
+!* 
+!* *** list *** & print ***
+!* 
+!* list has two forms: 
+!* 'list(cr)' lists all saved lines
+!* 'list #(cr)' start list at this line #
+!* you can stop the listing by control c key 
+!* 
+!* print command is 'print ....!' or 'print ....(cr)'
+!* where '....' is a list of expresions, formats, back-
+!* arrows, and strings.  these items are seperated by commas.
+!* 
+!* a format is a pound sign followed by a number.  it controlss 
+!* the number of spaces the value of a expresion is going to 
+!* be printed.  it stays effective for the rest of the print 
+!* command unless changed by another format.  iff no format is
+!* specified, 6 positions will be used.
+!* 
+!* a string is quoted in a pair of single quotes or a pair of
+!* double quotes.
+!* 
+!* a back-arrow means generate a (cr) without (lf) 
+!* 
+!* a (crlf) is generated after the entire list has been
+!* printed or iff the list is a null list.  however iff the list 
+!* ended with a comma, no (crl) is generated. 
+!* 
+list:  call tstnum    !test iff there is a #
+       call endchk    !iff no # we get a 0
+       call fndln     !find this or next line
+ls1:   jc   rstart    !c:passed txtunf 
+       call prtln     !print the line
+       call chkio     !stop iff hit control-c 
+       call fndlnp    !find next line
+       jmp  ls1       !and loop back 
+!* 
+print: mvi  c,6       !c = # of spaces 
+       rst  1         !iff null list & "!"
+       defb 73q 
+       defb 6q 
+       call crlf      !give cr-lf and
+       jmp  runsml    !continue same line
+pr2:   rst  1         !iff null list (cr) 
+       defb 0dh
+       defb 6q
+       call crlf      !also give cr-lf and 
+       jmp  runnxl    !go to next line 
+pr0:   rst  1         !else is it format?
+       defb '#' 
+       defb 5q
+       rst  3         !yes, evaluate expr. 
+       mov  c,l       !and save it in c
+       jmp  pr3       !look for more to print
+pr1:   call qtstg     !or is it a string?
+       jmp  pr8       !iff not, must be expr. 
+pr3:   rst  1         !iff ",", go find next
+       defb ',' 
+       defb 6q
+       call fin       !in the list.
+       jmp  pr0       !list continues
+pr6:  call crlf      !list ends 
+       rst  6 
+pr8:   rst  3         !evaluate the expr 
+       push b 
+       call prtnum    !print the value 
+       pop  b 
+       jmp  pr3       !more to print?
+!* 
+!**************************************************************
+!* 
+!* *** gosub *** & return ***
+!* 
+!* 'gosub expr!' or 'gosub expr (cr)' is like the 'goto' 
+!* command, except that the current text pointer, stack pointer
+!* etc. are save so that execution can be continued after the
+!* subroutine 'return'.  in order that 'gosub' can be nested 
+!* (and even recursive), the save area must be stacked.
+!* the stack pointer is saved in 'stkgos'. the old 'stkgos' is 
+!* saved in the stack.  iff we are in the main routine, 'stkgos'
+!* is zero (this was done by the "main" section of the code),
+!* but we still save it as a flag forr no further 'return's.
+!* 
+!* 'return(cr)' undos everyhing that 'gosub' did, and thus
+!* return the excution to the command after the most recent
+!* 'gosub'.  iff 'stkgos' is zero, it indicates that we 
+!* never had a 'gosub' and is thus an error. 
+!* 
+gosub: call pusha     !save the current "for"
+       rst  3         !parameters
+       push d         !and text pointer
+       call fndln     !find the target line
+       jnz  ahow      !not there. say "how?" 
+       lhld currnt    !found it, save old
+       push h         !'currnt' old 'stkgos' 
+       lhld stkgos
+       push h 
+       lxi  h,0       !and load new ones 
+       shld lopvar
+       dad  sp
+       shld stkgos
+       jmp  runtsl    !then run that line
+return:call endchk    !there must be a 0dh
+       lhld stkgos    !old stack pointer 
+       mov  a,h       !0 means not exist 
+       ora  l 
+       jz   qwhat     !so, we say: "what?" 
+       sphl           !else, restore it
+       pop  h 
+       shld stkgos    !and the old 'stkgos'
+       pop  h 
+       shld currnt    !and the old 'currnt'
+       pop  d         !old text pointer
+       call popa      !old "for" parameters
+       rst  6         !and we are back home
+!* 
+!**************************************************************
+!* 
+!* *** for *** & next ***
+!* 
+!* 'for' has two forms:
+!* 'for var=exp1 to exp2 step exp1' and 'for var=exp1 to exp2' 
+!* the second form means the same thing as the first form with 
+!* exp1=1.  (i.e., with a step of +1.) 
+!* tbi will find the variable var. and set its value to the
+!* current value of exp1.  it also evaluates expr2 and exp1
+!* and save all these together with the text pointerr etc. in 
+!* the 'for' save area, which consists of 'lopvar', 'lopinc',
+!* 'loplmt', 'lopln', and 'loppt'.  iff there is already some-
+!* thing in the save area (this is indicated by a non-zero 
+!* 'lopvar'), then the old save area is saved in the stack 
+!* before the new one overwrites it. 
+!* tbi will then dig in the stack and find out iff this same
+!* variable was used in another currently active 'for' loop. 
+!* iff that is the case then the old 'for' loop is deactivated.
+!* (purged from the stack..) 
+!* 
+!* 'next var' serves as the logical (not necessarilly physical)
+!* end of the 'for' loop.  the control variable var. is checked
+!* with the 'lopvar'.  iff they are not the same, tbi digs in 
+!* the stack to find the rightt one and purges all those that 
+!* did not match.  either way, tbi then adds the 'step' to 
+!* that variable and check the result with the limit.  iff it 
+!* is within the limit, control loops back to the command
+!* following the 'for'.  iff outside the limit, the save arer 
+!* is purged and execution continues.
+!* 
+for:   call pusha     !save the old save area
+       call setval    !set the control var.
+       dcx  h         !hl is its address 
+       shld lopvar    !save that 
+       lxi  h,tab5-1  !use 'exec' to look
+       jmp  exec      !for the word 'to' 
+fr1:   rst  3         !evaluate the limit
+       shld loplmt    !save that 
+       lxi  h,tab6-1  !use 'exec' to look
+       jmp  exec      !for the word 'step'
+fr2:   rst  3         !found it, get step
+       jmp  fr4 
+fr3:   lxi  h,1q      !not found, set to 1 
+fr4:   shld lopinc    !save that too 
+fr5:   lhld currnt    !save current line # 
+       shld lopln 
+       xchg           !and text pointer
+       shld loppt 
+       lxi  b,12q     !dig into stack to 
+       lhld lopvar    !find 'lopvar' 
+       xchg 
+       mov  h,b 
+       mov  l,b       !hl=0 now
+       dad  sp        !here is the stack 
+       defb 76q 
+fr7:   dad  b         !each level is 10 deep 
+       mov  a,m       !get that old 'lopvar' 
+       inx  h 
+       ora  m 
+       jz   fr8       !0 says no more in it
+       mov  a,m 
+       dcx  h 
+       cmp  d         !same as this one? 
+       jnz  fr7 
+       mov  a,m       !the other half? 
+       cmp  e 
+       jnz  fr7 
+       xchg           !yes, found one
+       lxi  h,0q
+       dad  sp        !try to move sp
+       mov  b,h 
+       mov  c,l 
+       lxi  h,12q 
+       dad  d 
+       call mvdown    !and purge 10 words
+       sphl           !in the stack
+fr8:   lhld loppt     !job done, restore de
+       xchg 
+       rst  6         !and continue
+!* 
+next:  rst  7         !get address of var. 
+       jc   qwhat     !no variable, "what?"
+       shld varnxt    !yes, save it
+nx0:   push d         !save text pointer 
+       xchg 
+       lhld lopvar    !get var. in 'for' 
+       mov  a,h 
+       ora  l         !0 says never had one
+       jz   awhat     !so we ask: "what?"
+       rst  4         !else we check them
+       jz   nx3       !ok, they agree
+       pop  d         !no, let's see 
+       call popa      !purge current loop
+       lhld varnxt    !and pop one level 
+       jmp  nx0       !go check again
+nx3:   mov  e,m       !come here when agreed 
+       inx  h 
+       mov  d,m       !de=value of var.
+       lhld lopinc
+       push h 
+       dad  d         !add one step
+       xchg 
+       lhld lopvar    !put it back 
+       mov  m,e 
+       inx  h 
+       mov  m,d 
+       lhld loplmt    !hl->limit 
+       pop  psw       !old hl
+       ora  a 
+       jp   nx1       !step > 0
+       xchg 
+nx1:   call ckhlde    !compare with limit
+       pop  d         !restore text pointer
+       jc   nx2       !outside limit 
+       lhld lopln     !within limit, go
+       shld currnt    !back to the saved 
+       lhld loppt     !'currnt' and text 
+       xchg           !pointer 
+       rst  6 
+nx2:   call popa      !purge this loop 
+       rst  6 
+!* 
+!**************************************************************
+!* 
+!* *** rem *** iff *** input *** & let (& deflt) ***
+!* 
+!* 'rem' can be followed by anything and is ignored by tbi.
+!* tbi treats it like an 'if' with a false condition.
+!* 
+!* 'if' is followed by an expr. as a condition and one or more 
+!* commands (including outher 'if's) seperated by semi-colons. 
+!* note that the word 'then' is not used.  tbi evaluates the 
+!* expr. iff it is non-zero, execution continues.  iff the 
+!* expr. is zero, the commands that follows are ignored and
+!* execution continues at the next line. 
+!* 
+!* 'iput' command is like the 'print' command, and is followed
+!* by a list of items.  iff the item is a string in single or 
+!* double quotes, or is a back-arrow, it has the same effect as
+!* in 'print'.  iff an item is a variable, this variable name is
+!* printed out followed by a colon.  then tbi waits for an 
+!* expr. to be typed in.  the variable iss then set to the
+!* value of this expr.  iff the variable is proceded by a string
+!* (again in single or double quotes), the string will be
+!* printed followed by a colon.  tbi then waits for input expr.
+!* and set the variable to the value of the expr.
+!* 
+!* iff the input expr. is invalid, tbi will print "what?",
+!* "how?" or "sorry" and reprint the prompt and redo the input.
+!* the execution will not terminate unless you type control-c. 
+!* this is handled in 'inperr'.
+!* 
+!* 'let' is followed by a list of items seperated by commas. 
+!* each item consists of a variable, an equal sign, and an expr. 
+!* tbi evaluates the expr. and set the varible to that value.
+!* tb will also handle 'let' command without the word 'let'.
+!* this is done by 'deflt'.
+!* 
+rem:   lxi  h,0q      !*** rem *** 
+       defb 76q 
+!* 
+iff:    rst  3         !*** iff ***
+       mov  a,h       !is the expr.=0? 
+       ora  l 
+       jnz  runsml    !no, continue
+       call fndskp    !yes, skip rest of line
+       jnc  runtsl
+       jmp  rstart
+!* 
+inperr:lhld stkinp    !*** inperr ***
+       sphl           !restore old sp
+       pop  h         !and old 'currnt'
+       shld currnt
+       pop  d         !and old text pointer
+       pop  d         !redo input
+!* 
+input: equ  $         !*** input *** 
+ip1:   push d         !save in case of error 
+       call qtstg     !is next item a string?
+       jmp  ip2       !no
+       rst  7         !yes. but followed by a
+       jc   ip4       !variable?   no. 
+       jmp  ip3       !yes.  input variable
+ip2:   push d         !save for 'prtstg' 
+       rst  7         !must be variable now
+       jc   qwhat     !"what?" it is not?
+       ldax d         !get ready for 'rtstg'
+       mov  c,a 
+       sub  a 
+       stax d 
+       pop  d 
+       call prtstg    !print string as prompt
+       mov  a,c       !restore text
+       dcx  d 
+       stax d 
+ip3:   push d         !save in case of error 
+       xchg 
+       lhld currnt    !also save 'currnt'
+       push h 
+       lxi  h,ip1     !a negative number 
+       shld currnt    !as a flag 
+       lxi  h,0q      !save sp too 
+       dad  sp
+       shld stkinp
+       push d         !old hl
+       mvi  a,72q     !print this too
+       call getln     !and get a line
+ip3a:  lxi  d,buffer  !points to buffer
+       rst  3         !evaluate input
+       nop            !can be 'call endchk'
+       nop
+       nop
+       pop  d         !ok, get old hl
+       xchg 
+       mov  m,e       !save value in var.
+       inx  h 
+       mov  m,d 
+       pop  h         !get old 'currnt'
+       shld currnt
+       pop  d         !and old text pointer
+ip4:   pop  psw       !purge junk in stack 
+       rst  1         !is next ch. ','?
+       defb ',' 
+       defb 3q
+       jmp  ip1       !yes, more items.
+ip5:   rst  6 
+!* 
+deflt: ldax d         !*** deflt *** 
+       cpi  0dh       !empty line is ok
+       jz   lt1       !else it is 'let'
+!* 
+let:   call setval    !*** let *** 
+       rst  1         !set value to var. 
+       defb ',' 
+       defb 3q
+       jmp  let       !item by item
+lt1:   rst  6         !until finish
+!* 
+!**************************************************************
+!* 
+!* *** expr ***
+!* 
+!* 'expr' evaluates arithmetical or logical expressions. 
+!* <expr>::=<expr2>
+!*          <expr2><rel.op.><expr2>
+!* where <rel.op.> is one of the operatorss in tab8 and the 
+!* result of these operations is 1 iff true and 0 iff false. 
+!* <expr2>::=(+ or -)<expr3>(+ or -<expr3>)(....)
+!* where () are optional and (....) are optional repeats.
+!* <expr3>::=<expr4>(<* or /><expr4>)(....)
+!* <expr4>::=<variable>
+!*           <function>
+!*           (<expr>)
+!* <expr> is recursive so that variable '@' can have an <expr> 
+!* as index, fnctions can have an <expr> as arguments, and
+!* <expr4> can be an <expr> in paranthese. 
+!* 
+!*                 expr   call expr2     this is at loc. 18
+!*                        push hl        save <expr2> value
+expr1: lxi  h,tab8-1  !lookup rel.op.
+       jmp  exec      !go do it
+xp11:  call xp18      !rel.op.">=" 
+       rc             !no, return hl=0 
+       mov  l,a       !yes, return hl=1
+       ret
+xp12:  call xp18      !rel.op."#"
+       rz             !false, return hl=0
+       mov  l,a       !true, return hl=1 
+       ret
+xp13:  call xp18      !rel.op.">"
+       rz             !false 
+       rc             !also false, hl=0
+       mov  l,a       !true, hl=1
+       ret
+xp14:  call xp18      !rel.op."<=" 
+       mov  l,a       !set hl=1
+       rz             !rel. true, return 
+       rc 
+       mov  l,h       !else set hl=0 
+       ret
+xp15:  call xp18      !rel.op."="
+       rnz            !false, retrun hl=0
+       mov  l,a       !else set hl=1 
+       ret
+xp16:  call xp18      !rel.op."<"
+       rnc            !false, return hl=0
+       mov  l,a       !else set hl=1 
+       ret
+xp17:  pop  h         !not rel.op. 
+       ret            !return hl=<expr2> 
+xp18:  mov  a,c       !subroutine for all
+       pop  h         !rel.op.'s 
+       pop  b 
+       push h         !reverse top of stack
+       push b 
+       mov  c,a 
+       call expr2     !get 2nd <expr2> 
+       xchg           !value in de now 
+       xthl           !1st <expr2> in hl 
+       call ckhlde    !compare 1st with 2nd
+       pop  d         !restore text pointer
+       lxi  h,0q      !set hl=0, a=1 
+       mvi  a,1 
+       ret
+!* 
+expr2: rst  1         !negative sign?
+       defb '-' 
+       defb 6q
+       lxi  h,0q      !yes, fake '0-'
+       jmp  xp26      !treat like subtract 
+xp21:  rst  1         !positive sign?  ignore
+       defb '+' 
+       defb 0q
+xp22:  call expr3     !1st <expr3> 
+xp23:  rst  1         !add?
+       defb '+' 
+       defb 25q 
+       push h         !yes, save value 
+       call expr3     !get 2nd<expr3> 
+xp24:  xchg           !2nd in de 
+       xthl           !1st in hl 
+       mov  a,h       !compare sign
+       xra  d 
+       mov  a,d 
+       dad  d 
+       pop  d         !restore text pointer
+       jm   xp23      !1st 2nd sign differ 
+       xra  h         !1st 2nd sign equal
+       jp   xp23      !so isp result
+       jmp  qhow      !else we have overflow 
+xp25:  rst  1         !subtract? 
+       defb '-' 
+       defb 203q
+xp26:  push h         !yes, save 1st <expr3> 
+       call expr3     !get 2nd <expr3> 
+       call chgsgn    !negate
+       jmp  xp24      !and add them
+!* 
+expr3: call expr4     !get 1st <expr4> 
+xp31:  rst  1         !multiply? 
+       defb '*' 
+       defb 54q 
+       push h         !yes, save 1st 
+       call expr4     !and get 2nd <expr4> 
+       mvi  b,0q      !clear b for sign
+       call chksgn    !check sign
+       xchg           !2nd in de now 
+       xthl           !1st in hl 
+       call chksgn    !check sign of 1st 
+       mov  a,h       !is hl > 255 ? 
+       ora  a 
+       jz   xp32      !no
+       mov  a,d       !yes, how about de 
+       ora  d 
+       xchg           !put smaller in hl 
+       jnz  ahow      !also >, will overflow 
+xp32:  mov  a,l       !this is dumb
+       lxi  h,0q      !clear result
+       ora  a         !add and count 
+       jz   xp35
+xp33:  dad  d 
+       jc   ahow      !overflow
+       dcr  a 
+       jnz  xp33
+       jmp  xp35      !finished
+xp34:  rst  1         !divide? 
+       defb '/' 
+       defb 104q
+       push h         !yes, save 1st <expr4> 
+       call expr4     !and get 2nd one 
+       mvi  b,0q      !clear b for sign
+       call chksgn    !check sign of 2nd 
+       xchg           !put 2nd in de 
+       xthl           !get 1st in hl 
+       call chksgn    !check sign of 1st 
+       mov  a,d       !divide by 0?
+       ora  e 
+       jz   ahow      !say "how?"
+       push b         !else save sign
+       call divide    !use subroutine
+       mov  h,b       !result in hl now
+       mov  l,c 
+       pop  b         !get sign back 
+xp35:  pop  d         !and text pointer
+       mov  a,h       !hl must be +
+       ora  a 
+       jm   qhow      !else it is overflow 
+       mov  a,b 
+       ora  a 
+       cm   chgsgn    !change sign iff needed 
+       jmp  xp31      !look or more terms 
+!* 
+expr4: lxi  h,tab4-1  !find function in tab4 
+       jmp  exec      !and go do it
+xp40:  rst  7         !no, not a function
+       jc   xp41      !nor a variable
+       mov  a,m       !variable
+       inx  h 
+       mov  h,m       !value in hl 
+       mov  l,a 
+       ret
+xp41:  call tstnum    !or is it a number 
+       mov  a,b       !# of digit
+       ora  a 
+       rnz            !ok
+parn:  rst  1         !no digit, must be 
+       defb '(' 
+       defb 5q
+       rst  3         !"(expr)"
+       rst  1 
+       defb ')' 
+       defb 1q
+xp42:  ret
+xp43:  jmp  qwhat     !else say: "what?" 
+!* 
+rnd:   call parn      !*** rnd(expr) *** 
+       mov  a,h       !expr must be +
+       ora  a 
+       jm   qhow
+       ora  l         !and non-zero
+       jz   qhow
+       push d         !save both 
+       push h 
+       lhld ranpnt    !get memory as random
+       lxi  d,lstrom  !number
+       rst  4 
+       jc   ra1       !wrap around iff last 
+       lxi  h,start 
+ra1:   mov  e,m 
+       inx  h 
+       mov  d,m 
+       shld ranpnt
+       pop  h 
+       xchg 
+       push b 
+       call divide    !rnd(n)=mod(m,n)+1 
+       pop  b 
+       pop  d 
+       inx  h 
+       ret
+!* 
+abs:   call parn      !*** abs(expr) *** 
+       call chksgn    !check sign
+       mov  a,h       !note that -32768
+       ora  h         !cannot change sign
+       jm   qhow      !so say: "how?"
+       ret
+size:  lhld txtunf    !*** size ***
+       push d         !get the number of free
+       xchg           !bytes between 'txtunf'
+sizea: lxi  h,varbgn  !and 'varbgn'
+       call subde 
+       pop  d 
+       ret
+!*
+!*********************************************************
+!*
+!*   *** out *** inp *** wait *** poke *** peek *** & usr
+!*
+!*  out i,j(,k,l)
+!*
+!*  outputs expression 'j' to port 'i', and may be repeated
+!*  as in data 'l' to port 'k' as many times as needed
+!*  this command modifies !*  this command modifies 
+!*  this command modify's a small section of code located 
+!*  just above address 2k
+!*
+!*  inp (i)
+!*
+!*  this function returns data read from input port 'i' as
+!*  it's value.
+!*  it also modifies code just above 2k.
+!*
+!*  wait i,j,k
+!*
+!*  this command reads the status of port 'i', exclusive or's
+!*  the result with 'k' if there is one, or if not with 0, 
+!*  and's with 'j' and returns when the result is nonzero.
+!*  its modified code is also above 2k.
+!*
+!*  poke i,j(,k,l)
+!*
+!*  this command works like out except that it puts data 'j'
+!*  into memory location 'i'.
+!*
+!*  peek (i)
+!*
+!*  this function works like inp except it gets it's value
+!*  from memory location 'i'.
+!*
+!*  usr (i(,j))
+!*
+!*  usr calls a machine language subroutine at location 'i'
+!*  if the optional parameter 'j' is used its value is passed
+!*  in h&l.  the value of the function should be returned in h&l.
+!*
+!************************************************************
+!*
+outcmd:rst  3 
+       mov  a,l
+       sta  outio + 1
+       rst  1
+       defb ','
+       defb 2fh
+       rst  3
+       mov  a,l
+       call outio
+       rst  1
+       defb ','
+       defb 03h
+       jmp  outcmd 
+       rst  6
+waitcm:rst  3
+       mov  a,l
+       sta  waitio + 1
+       rst  1
+       defb ','
+       defb 1bh
+       rst  3
+       push h
+       rst  1
+       defb ','
+       defb 7h
+       rst  3
+       mov  a,l
+       pop  h
+       mov  h,a
+       jmp  $ + 2
+       mvi  h,0
+       jmp  waitio
+inp:   call parn
+       mov  a,l
+       sta  inpio + 1
+       mvi  h,0
+       jmp  inpio
+       jmp  qwhat
+poke:  rst  3
+       push h
+       rst  1
+       defb ','
+       defb 12h
+       rst  3
+       mov  a,l
+       pop  h
+       mov  m,a
+       rst  1
+       defb ',',03h
+       jmp  poke
+       rst 6
+peek:  call parn
+       mov  l,m
+       mvi  h,0
+       ret
+       jmp  qwhat
+usr:   push b
+       rst  1
+       defb '(',28d    !qwhat
+       rst  3          !expr
+       rst  1
+       defb ')',7      !pasparm
+       push d
+       lxi  d,usret
+       push d
+       push h
+       ret             !call usr routine
+pasprm:rst  1
+       defb ',',14d
+       push h
+       rst  3
+       rst  1
+       defb ')',9
+       pop  b
+       push d
+       lxi  d,usret
+       push d
+       push b
+       ret             !call usr routine
+usret: pop  d
+       pop  b
+       ret
+       jmp  qwhat
+!*
+!**************************************************************
+!* 
+!* *** divide *** subde *** chksgn *** chgsgn *** & ckhlde *** 
+!* 
+!* 'divide' divides hl by de, result in bc, remainder in hl
+!* 
+!* 'subde' subtracts de from hl
+!* 
+!* 'chksgn' checks sign of hl.  iff +, no change.  iff -, change 
+!* sign and flip sign of b.
+!* 
+!* 'chgsgn' chnges sign of hl and b unconditionally. 
+!* 
+!* 'ckhle' checks sign of hl and de.  iff different, hl and de 
+!* are interchanged.  iff same sign, not interchanged.  either
+!* case, hl de are then compared to set the flags. 
+!* 
+divide:push h         !*** divide ***
+       mov  l,h       !divide h by de
+       mvi  h,0 
+       call dv1 
+       mov  b,c       !save result in b
+       mov  a,l       !(remainder+l)/de
+       pop  h 
+       mov  h,a 
+dv1:   mvi  c,377q    !result in c 
+dv2:   inr  c         !dumb routine
+       call subde     !divide by subtract
+       jnc  dv2       !and count 
+       dad  d 
+       ret
+!* 
+subde: mov  a,l       !*** subde *** 
+       sub  e         !subtract de from
+       mov  l,a       !hl
+       mov  a,h 
+       sbb  d 
+       mov  h,a 
+       ret
+!* 
+chksgn:mov  a,h       !*** chksgn ***
+       ora  a         !check sign of hl
+       rp             !iff -, change sign 
+!* 
+chgsgn:mov  a,h       !*** chgsgn ***
+       cma            !change sign of hl 
+       mov  h,a 
+       mov  a,l 
+       cma
+       mov  l,a 
+       inx  h 
+       mov  a,b       !and also flip b 
+       xri  200q
+       mov  b,a 
+       ret
+!* 
+ckhlde:mov  a,h 
+       xra  d         !same sign?
+       jp   ck1       !yes, compare
+       xchg           !no, xch and comp
+ck1:   rst  4 
+       ret
+!* 
+!**************************************************************
+!* 
+!* *** setval *** fin *** endchk *** & error (& friends) *** 
+!* 
+!* "setval" expects a variable, followed by an equal sign and
+!* then an expr.  it evaluates the expr. and set the variable
+!* to that value.
+!* 
+!* "fin" checks the end of a command.  iff it ended with "!", 
+!* execution continues.  iff it ended with a cr, it finds the 
+!* next line and continue from there.
+!* 
+!* "endchk" checks iff a command is ended with cr.  this is 
+!* required in certain commands. (goto, return, and stop etc.) 
+!* 
+!* "error" prints the string pointed by de (and ends with cr). 
+!* it then prints the line pointed by 'currnt' with a "?"
+!* inserted at where the old text pointer (should be on top
+!* o the stack) points to.  execution of tb is stopped
+!* and tbi is restarted.  however, iff 'currnt' -> zero 
+!* (indicating a direct command), the direct command is not
+!*  printed.  and iff 'currnt' -> negative # (indicating 'input'
+!* command, the input line is not printed and execution is 
+!* not terminated but continued at 'inperr'. 
+!* 
+!* related to 'error' are the following: 
+!* 'qwhat' saves text pointer in stack and get message "what?" 
+!* 'awhat' just get message "what?" and jump to 'error'. 
+!* 'qsorry' and 'asorry' do same kind of thing.
+!* 'qhow' and 'ahow' in the zero page section also do this 
+!* 
+setval:rst  7         !*** setval ***
+       jc   qwhat     !"what?" no variable 
+       push h         !save address of var.
+       rst  1         !pass "=" sign 
+       defb '=' 
+       defb 10q 
+       rst  3         !evaluate expr.
+       mov  b,h       !value in bc now 
+       mov  c,l 
+       pop  h         !get address 
+       mov  m,c       !save value
+       inx  h 
+       mov  m,b 
+       ret
+sv1:   jmp  qwhat     !no "=" sign 
+!* 
+fin:   rst  1         !*** fin *** 
+       defb 73q 
+       defb 4q 
+       pop  psw       !"!", purge ret addr.
+       jmp  runsml    !continue same line
+fi1:   rst  1         !not "!", is it cr?
+       defb 0dh
+       defb 4q 
+       pop  psw       !yes, purge ret addr.
+       jmp  runnxl    !run next line 
+fi2:   ret            !else return to caller 
+!* 
+endchk:rst  5         !*** endchk ***
+       cpi  0dh       !end with cr?
+       rz             !ok, else say: "what?" 
+!* 
+qwhat: push d         !*** qwhat *** 
+awhat: lxi  d,what    !*** awhat *** 
+error: sub  a         !*** error *** 
+       call prtstg    !print 'what?', 'how?' 
+       pop  d         !or 'sorry'
+       ldax d         !save the character
+       push psw       !at where old de ->
+       sub  a         !and put a 0 there 
+       stax d 
+       lhld currnt    !get current line #
+       push h 
+       mov  a,m       !check the value 
+       inx  h 
+       ora  m 
+       pop  d 
+       jz   rstart    !iff zero, just rerstart
+       mov  a,m       !iff negative,
+       ora  a 
+       jm   inperr    !redo input
+       call prtln     !else print the line 
+       dcx  d         !upto where the 0 is 
+       pop  psw       !restore the character 
+       stax d 
+       mvi  a,77q     !printt a "?" 
+       rst  2 
+       sub  a         !and the rest of the 
+       call prtstg    !line
+       jmp  rstart
+qsorry:push d         !*** qsorry ***
+asorry:lxi  d,sorry   !*** asorry ***
+       jmp  error 
+!* 
+!**************************************************************
+!* 
+!* *** getln *** fndln (& friends) *** 
+!* 
+!* 'getln' reads a input line into 'buffer'.  it first prompt
+!* the character in a (given by the caller), then it fills the 
+!* the buffer and echos.  it ignores lf's and nulls, but still 
+!* echos them back.  rub-out is used to cause it to delete 
+!* the last charater (iff there is one), and alt-mod is used to 
+!* cause it to delete the whole line and start it all over.
+!* 0dhsignals the end of a line, and caue 'getln' to return.
+!* 
+!* 'fndln' finds a line with a given line # (in hl) in the 
+!* text save area.  de is used as the text pointer.  iff the
+!* line is found, de will point to the beginning of that line
+!* (i.e., the low byte of the line #), and flags are nc & z. 
+!* iff that line is not there and a line with a higher line # 
+!* is found, de points to there and flags are nc & nz.  iff 
+!* we reached the end of text save are and cannot find the 
+!* line, flags are c & nz. 
+!* 'fndln' will initialize de to the beginning of the text save
+!* area to start the search.  some other entries of this 
+!* routine will not initialize de and do the search. 
+!* 'fndlnp' will start with de and search for the line #.
+!* 'fndnxt' will bump de by 2, find a 0dhand then start search.
+!* 'fndskp' use de to find a cr, and then strart search. 
+!* 
+getln: rst  2         !*** getln *** 
+       lxi  d,buffer  !prompt and init
+gl1:   call chkio     !check keyboard
+       jz   gl1       !no input, wait
+       cpi  177q      !delete lst character?
+       jz   gl3       !yes 
+       cpi  12q       !ignore lf 
+       jz   gl1 
+       ora  a         !ignore null 
+       jz   gl1 
+       cpi  134q      !delete the whole line?
+       jz   gl4       !yes 
+       stax d         !else, save input
+       inx  d         !and bump pointer
+       cpi  15q       !was it cr?
+       jnz  gl2       !no
+       mvi  a,12q     !yes, get line feed
+       rst  2         !call outc and line feed
+       ret            !we've got a line
+gl2:   mov  a,e       !more free room?
+       cpi  bufend and 0ffh
+       jnz  gl1       !yes, get next input 
+gl3:   mov  a,e       !delete last character 
+       cpi  buffer and 0ffh    !but do we have any? 
+       jz   gl4       !no, redo whole line 
+       dcx  d         !yes, backup pointer 
+       mvi  a,'_'     !and echo a back-space 
+       rst  2 
+       jmp  gl1       !go get next input 
+gl4:   call crlf      !redo entire line
+       mvi  a,136q    !cr, lf and up-arrow 
+       jmp  getln 
+!* 
+fndln: mov  a,h       !*** fndln *** 
+       ora  a         !check sign of hl
+       jm   qhow      !it cannt be -
+       lxi  d,txtbgn  !init. text pointer
+!* 
+fndlnp:equ  $         !*** fndlnp ***
+fl1:   push h         !save line # 
+       lhld txtunf    !check iff we passed end
+       dcx  h 
+       rst  4 
+       pop  h         !get line # back 
+       rc             !c,nz passed end 
+       ldax d         !we did not, get byte 1
+       sub  l         !is this the line? 
+       mov  b,a       !compare low order 
+       inx  d 
+       ldax d         !get byte 2
+       sbb  h         !compare high order
+       jc   fl2       !no, not there yet 
+       dcx  d         !else we either found
+       ora  b         !it, or it is not there
+       ret            !nc,z:found! nc,nz:no
+!* 
+fndnxt:equ  $         !*** fndnxt ***
+       inx  d         !find next line
+fl2:   inx  d         !just passed byte 1 & 2
+!* 
+fndskp:ldax d         !*** fndskp ***
+       cpi  0dh       !try to find 0dh
+       jnz  fl2       !keep looking
+       inx  d         !found cr, skip over 
+       jmp  fl1       !check iff end of text
+!* 
+!*************************************************************
+!* 
+!* *** prtstg *** qtstg *** prtnum *** & prtln *** 
+!* 
+!* 'prtstg' prints a string pointed by de.  it stops printing
+!* and returns to calìer when either a 0dhis printed or when 
+!* the next byte is the same as what was in a (given by the
+!* caller).  old a is stored in b, old b is lost.
+!* 
+!* 'qtstg' looks for a back-arrow, single quote, or double 
+!* quote.  iff none of these, return to caller.  iff back-arrow, 
+!* output a 0dhwithout a lf.  iff single or double quote, print 
+!* the string in the quote and demands a matching unquote. 
+!* after the printing the next 3 bytes of the caller is skipped
+!* over (usually a jump instruction).
+!* 
+!* 'prtnum' prints the number in hl.  leading blanks are added 
+!* iff needed to pad the number of spaces to the number in c. 
+!* however, iff the number of digits is larger than the # in
+!* c, all digits are printed anyway.  negative sign is also
+!* printed and counted in, positive sign is not. 
+!* 
+!* 'prtln' prinsra saved text line with line # and all. 
+!* 
+prtstg:mov  b,a       !*** prtstg ***
+ps1:   ldax d         !get a characterr 
+       inx  d         !bump pointer
+       cmp  b         !same as old a?
+       rz             !yes, return 
+       rst  2         !else print it 
+       cpi  0dh       !was it a cr?
+       jnz  ps1       !no, next
+       ret            !yes, return 
+!* 
+qtstg: rst  1         !*** qtstg *** 
+       defb '"' 
+       defb 17q 
+       mvi  a,42q     !it is a " 
+qt1:   call prtstg    !print until another 
+       cpi  0dh       !was last one a cr?
+       pop  h         !return address
+       jz   runnxl    !was cr, run next line 
+qt2:   inx  h         !skip 3 bytes on return
+       inx  h 
+       inx  h 
+       pchl           !return
+qt3:   rst  1         !is it a ' ? 
+       defb 47q 
+       defb 5q
+       mvi  a,47q     !yes, do same
+       jmp  qt1       !as in " 
+qt4:   rst  1         !is it back-arrow? 
+       defb 137q
+       defb 10q 
+       mvi  a,215q    !yes, 0dhwithout lf!!
+       rst  2         !do it twice to give 
+       rst  2         !tty enough time 
+       pop  h         !return address
+       jmp  qt2 
+qt5:   ret            !none of above 
+!* 
+prtnum push d         !*** prtnum ***
+       lxi  d,12q     !decimal 
+       push d         !save as a flag
+       mov  b,d       !b=sign
+       dcr  c         !c=spaces
+       call chksgn    !check sign
+       jp   pn1       !no sign 
+       mvi  b,55q     !b=sign
+       dcr  c         !'-' takes space 
+pn1:   push b         !save sign & space 
+pn2:   call divide    !devide hl by 10 
+       mov  a,b       !result 0? 
+       ora  c 
+       jz   pn3       !yes, we got all 
+       xthl           !no, save remainder
+       dcr  l         !and count space 
+       push h         !hl is old bc
+       mov  h,b       !move result to bc 
+       mov  l,c 
+       jmp  pn2       !and divide by 10
+pn3:   pop  b         !we got all digits in
+pn4:   dcr  c         !the stack 
+       mov  a,c       !look at space count 
+       ora  a 
+       jm   pn5       !no leading blanks 
+       mvi  a,40q     !leading blanks
+       rst  2 
+       jmp  pn4       !more? 
+pn5:   mov  a,b       !print sign
+       rst  2         !maybe - or null 
+       mov  e,l       !last remainder in e 
+pn6:   mov  a,e       !check digit in e
+       cpi  12q       !10 is flag for no more
+       pop  d 
+       rz             !iff so, return 
+       adi  60q		!else convert to ascii
+       rst  2         !and print the digit 
+       jmp  pn6       !go back for more
+!* 
+prtln: ldax d         !*** prtln *** 
+       mov  l,a       !low order line #
+       inx  d 
+       ldax d         !high order
+       mov  h,a 
+       inx  d 
+       mvi  c,4q      !print 4 digit line #
+       call prtnum
+       mvi  a,40q     !followed by a blank 
+       rst  2 
+       sub  a         !and then the text 
+       call prtstg
+       ret
+!* 
+!**************************************************************
+!* 
+!* *** mvup *** mvdown *** popa *** & pusha ***
+!* 
+!* 'mvup' moves a block up from here de-> to where bc-> until 
+!* de = hl 
+!* 
+!* 'mvdown' moves a block down from where de-> to where hl-> 
+!* until de = bc 
+!* 
+!* 'popa' restores the 'for' loop variable save area from the
+!* stack 
+!* 
+!* 'pusha' stacks the 'for' loop variable save area into the 
+!* stack 
+!* 
+mvup:  rst  4         !*** mvup ***
+       rz             !de = hl, return 
+       ldax d         !get one byte
+       stax b         !move it 
+       inx  d         !increase both pointers
+       inx  b 
+       jmp  mvup      !until done
+!* 
+mvdown:mov  a,b       !*** mvdown ***
+       sub  d         !test iff de = bc 
+       jnz  md1       !no, go move 
+       mov  a,c       !maybe, other byte?
+       sub  e 
+       rz             !yes, return 
+md1:   dcx  d         !else move a byte
+       dcx  h         !but first decrease
+       ldax d         !both pointers and 
+       mov  m,a       !then do it
+       jmp  mvdown    !loop back 
+!* 
+popa:  pop  b         !bc = return addr. 
+       pop  h         !restore lopvar, but 
+       shld lopvar    !=0 means no more
+       mov  a,h 
+       ora  l 
+       jz   pp1       !yep, go return
+       pop  h         !nop, restore others 
+       shld lopinc
+       pop  h 
+       shld loplmt
+       pop  h 
+       shld lopln 
+       pop  h 
+       shld loppt 
+pp1:   push b         !bc = return addr. 
+       ret
+!* 
+pusha: lxi  h,stklmt  !*** pusha *** 
+       call chgsgn
+       pop  b         !bc=return address 
+       dad  sp        !is stack near the top?
+       jnc  qsorry    !yes, sorry for that.
+       lhld lopvar    !else save loop var.s
+       mov  a,h       !but iff lopvar is 0
+       ora  l         !that will be all
+       jz   pu1 
+       lhld loppt     !else, more to save
+       push h 
+       lhld lopln 
+       push h 
+       lhld loplmt
+       push h 
+       lhld lopinc
+       push h 
+       lhld lopvar
+pu1:   push h 
+       push b         !bc = return addr. 
+       ret
+!* 
+!**************************************************************
+!* 
+!* *** outc *** & chkio ****!
+!* these are the only i/o routines in tbi. 
+!* 'outc' is controlled by a software switch 'ocsw'.  iff ocsw=0
+!* 'outc' will just return to the caller.  iff ocsw is not 0, 
+!* it will output the byte in a.  iff that is a cr, a lf is also
+!* send out.  only the flags may be changed at return, all reg.
+!* are restored. 
+!* 
+!* 'chkio' checks the input.  iff no input, it will return to 
+!* the caller with the z flag set.  iff there is input, z flag
+!* is cleared and the input byte is in a.  howerer, iff the 
+!* input is a control-o, the 'ocsw' switch is complimented, and
+!* z flag is returned.  iff a control-c is read, 'chkio' will 
+!* restart tbi and do not return to the caller.
+!* 
+!*                 outc   push af        this is at loc. 10
+!*                        ld   a,ocsw    check software switch 
+!*                        ior  a 
+oc2:   jnz  oc3       !it is on
+       pop  psw       !it is off 
+       ret            !restore af and return 
+oc3:   pop  a         !get old a back
+       push b         !save b on stack
+       push d         !and d
+       push h         !and h too
+       sta  outcar    !save character
+       mov  e,a       !put char. in e for cpm
+       mvi  c,2       !get conout command
+       call cpm       !call cpm and do it
+       lda  outcar    !get char. back
+       cpi  0dh       !was it a 'cr'?
+       jnz  done      !no, done
+       mvi  e,0ah     !get linefeed
+       mvi  c,2       !and conout again
+       call cpm       !call cpm
+done:  lda  outcar    !get character back
+idone: pop  h         !get h back
+       pop  d         !and d
+       pop  b         !and b too
+       ret            !done at last
+chkio: push b         !save b on stack
+       push d         !and d
+       push h         !then h
+       mvi  c,11      !get constat word
+       call cpm       !call the bdos
+       ora  a         !set flags
+       jnz  ci1       !if ready get character
+       jmp  idone     !restore and return
+ci1:   mvi  c,1       !get conin word
+       call cpm       !call the bdos
+       cpi  0fh       !is it control-o?
+       jnz  ci2       !no, more checking
+       lda  ocsw      !control-o  flip ocsw
+       cma            !on to off, off to on
+       sta  ocsw      !and put it back
+       jmp  chkio     !and get another character
+ci2:   cpi  3         !is it control-c?
+       jnz  idone     !return and restore if not
+       jmp  rstart    !yes, restart tbi
+lstrom:equ  $         !all above can be rom
+outio: out  0ffh
+       ret
+waitio:in   0ffh
+       xra  h
+       ana  l
+       jz   waitio
+       rst  6
+inpio: in   0ffh
+       mov  l,a
+       ret
+outcar:defb 0         !output char. storage
+ocsw:  defb 0ffh      !switch for output
+currnt:defw 0         !points to current line
+stkgos:defw 0         !saves sp in 'gosub'
+varnxt:defw 0         !temporary storage
+stkinp:defw 0         !saves sp in 'input'
+lopvar:defw 0         !'for' loop save area
+lopinc:defw 0         !increment
+loplmt:defw 0         !limit
+lopln: defw 0         !line number
+loppt: defw 0         !text pointer
+ranpnt:defw start     !random number pointer
+txtunf:defw txtbgn    !->unfilled text area
+txtbgn:defvs 1         !text save area begins 
+msg1:  defb 7fh,7fh,7fh,'Tiny basic ver. 3.1',0dh 
+init:  mvi  a,0ffh
+       sta  ocsw      !turn on output switch 
+       mvi  a,0ch     !get form feed 
+       rst  2         !send to crt 
+patlop:sub  a         !clear accumulator
+       lxi  d,msg1    !get init message
+       call prtstg    !send it
+lstram:lda  7         !get fbase for top
+       sta  rstart+2
+       dcr  a         !decrement for other pointers
+       sta  ss1a+2    !and fix them too
+       sta  tv1a+2
+       sta  st3a+2
+       sta  st4a+2
+       sta  ip3a+2
+       sta  sizea+2
+       sta  getln+3
+       sta  pusha+2
+       lxi  h,st1     !get new start jump
+       shld start+1   !and fix it
+       jmp  st1
+       jmp  qwhat     !print "what?" iff wrong
+txtend:equ  $         !text save area ends 
+varbgn:defvs   2*27      !variable @(0)
+       defvs   1         !extra byte for buffer
+buffer:defvs   80        !input buffer
+bufend:equ  $         !buffer ends
+       defvs   40        !extra bytes for stack
+stklmt:equ  $         !top limit for stack
+       org  2000h
+stack: equ  $         !stack starts here

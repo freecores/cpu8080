@@ -7,7 +7,7 @@ cpu_tbw.xwv
 Clocked
 -
 -
-10000000000
+100000000000
 ns
 GSR:false
 PRLD:false
@@ -24,7 +24,13 @@ CLOCK_LIST_END
 SIGNAL_LIST_BEGIN
 addr
 clock
+b
+clock
 data
+clock
+g
+clock
+hsync_n
 clock
 inta
 clock
@@ -32,11 +38,15 @@ intr
 clock
 junk
 clock
+r
+clock
 readio
 clock
 readmem
 clock
 reset
+clock
+vsync_n
 clock
 waitr
 clock
@@ -47,9 +57,15 @@ clock
 SIGNAL_LIST_END
 SIGNALS_NOT_ON_DISPLAY
 addr_DIFF
+b_DIFF
+g_DIFF
+hsync_n_DIFF
 inta_DIFF
+intr_DIFF
+r_DIFF
 readio_DIFF
 readmem_DIFF
+vsync_n_DIFF
 writeio_DIFF
 writemem_DIFF
 SIGNALS_NOT_ON_DISPLAY_END
@@ -69,6 +85,11 @@ writeio
 writemem
 addr
 data
+b
+g
+r
+hsync_n
+vsync_n
 SIGNAL_ORDER_END
 -X-X-X-
 
