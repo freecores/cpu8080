@@ -1,6 +1,10 @@
 #include "isim/work/cpu__tbw/cpu__tbw.h"
 #include "isim/work/glbl/glbl.h"
 static const char * HSimCopyRightNotice = "Copyright 2004-2005, Xilinx Inc. All rights reserved.";
+#include "C:/Xilinx/vhdl/hdp/nt/ieee/std_logic_1164/std_logic_1164.h"
+#include "C:/Xilinx/vhdl/hdp/nt/ieee/numeric_std/numeric_std.h"
+#include "isim/work/common/common.h"
+#include "isim/unisim.auxlib/vcomponents/vcomponents.h"
 
 
 #include "work/cpu__tbw/cpu__tbw.h"
@@ -12,8 +16,17 @@ va_list vap)
 }
 
 
-#include "work/alu/alu.h"
+#include "work/chrrom/chrrom.h"
 static HSim__s6* IF1(HSim__s6 *Arch,const char* label,int nGenerics, 
+va_list vap)
+{
+    HSim__s6 *blk = new workMchrrom(label); 
+    return blk;
+}
+
+
+#include "work/alu/alu.h"
+static HSim__s6* IF2(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMalu(label); 
@@ -22,7 +35,7 @@ va_list vap)
 
 
 #include "work/selectone/selectone.h"
-static HSim__s6* IF2(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF3(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMselectone(label); 
@@ -30,8 +43,26 @@ va_list vap)
 }
 
 
+#include "work/chrmemmap/chrmemmap.h"
+static HSim__s6* IF4(HSim__s6 *Arch,const char* label,int nGenerics, 
+va_list vap)
+{
+    HSim__s6 *blk = new workMchrmemmap(label); 
+    return blk;
+}
+
+
+#include "work/terminal/terminal.h"
+static HSim__s6* IF5(HSim__s6 *Arch,const char* label,int nGenerics, 
+va_list vap)
+{
+    HSim__s6 *blk = new workMterminal(label); 
+    return blk;
+}
+
+
 #include "work/select/select.h"
-static HSim__s6* IF3(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF6(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMselect(label); 
@@ -40,7 +71,7 @@ va_list vap)
 
 
 #include "work/rom/rom.h"
-static HSim__s6* IF4(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF7(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMrom(label); 
@@ -49,7 +80,7 @@ va_list vap)
 
 
 #include "work/ram/ram.h"
-static HSim__s6* IF5(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF8(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMram(label); 
@@ -58,7 +89,7 @@ va_list vap)
 
 
 #include "work/intcontrol/intcontrol.h"
-static HSim__s6* IF6(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF9(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMintcontrol(label); 
@@ -67,7 +98,7 @@ va_list vap)
 
 
 #include "work/cpu8080/cpu8080.h"
-static HSim__s6* IF7(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF10(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMcpu8080(label); 
@@ -76,7 +107,7 @@ va_list vap)
 
 
 #include "work/testbench/testbench.h"
-static HSim__s6* IF8(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF11(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMtestbench(label); 
@@ -85,10 +116,26 @@ va_list vap)
 
 
 #include "work/glbl/glbl.h"
-static HSim__s6* IF9(HSim__s6 *Arch,const char* label,int nGenerics, 
+static HSim__s6* IF12(HSim__s6 *Arch,const char* label,int nGenerics, 
 va_list vap)
 {
     HSim__s6 *blk = new workMglbl(label); 
+    return blk;
+}
+
+
+static HSim__s6* IF13(HSim__s6 *Arch,const char* label,int nGenerics,va_list vap)
+{
+    extern HSim__s6* createWork_vga_vga_arch(const char*);
+    HSim__s6 *blk = createWork_vga_vga_arch(label);
+    return blk;
+}
+
+
+static HSim__s6* IF14(HSim__s6 *Arch,const char* label,int nGenerics,va_list vap)
+{
+    extern HSim__s6* createWork_vga_vga_arch(const char*);
+    HSim__s6 *blk = createWork_vga_vga_arch(label);
     return blk;
 }
 
@@ -99,15 +146,20 @@ public:
         HSimConfigDecl * cfgvh = 0;
         cfgvh = new HSimConfigDecl("default");
         (*cfgvh).addVlogModule("cpu_tbw", (HSimInstFactoryPtr)IF0);
-        (*cfgvh).addVlogModule("alu", (HSimInstFactoryPtr)IF1);
-        (*cfgvh).addVlogModule("selectone", (HSimInstFactoryPtr)IF2);
-        (*cfgvh).addVlogModule("select", (HSimInstFactoryPtr)IF3);
-        (*cfgvh).addVlogModule("rom", (HSimInstFactoryPtr)IF4);
-        (*cfgvh).addVlogModule("ram", (HSimInstFactoryPtr)IF5);
-        (*cfgvh).addVlogModule("intcontrol", (HSimInstFactoryPtr)IF6);
-        (*cfgvh).addVlogModule("cpu8080", (HSimInstFactoryPtr)IF7);
-        (*cfgvh).addVlogModule("testbench", (HSimInstFactoryPtr)IF8);
-        (*cfgvh).addVlogModule("glbl", (HSimInstFactoryPtr)IF9);
+        (*cfgvh).addVlogModule("chrrom", (HSimInstFactoryPtr)IF1);
+        (*cfgvh).addVlogModule("alu", (HSimInstFactoryPtr)IF2);
+        (*cfgvh).addVlogModule("selectone", (HSimInstFactoryPtr)IF3);
+        (*cfgvh).addVlogModule("chrmemmap", (HSimInstFactoryPtr)IF4);
+        (*cfgvh).addVlogModule("terminal", (HSimInstFactoryPtr)IF5);
+        (*cfgvh).addVlogModule("select", (HSimInstFactoryPtr)IF6);
+        (*cfgvh).addVlogModule("rom", (HSimInstFactoryPtr)IF7);
+        (*cfgvh).addVlogModule("ram", (HSimInstFactoryPtr)IF8);
+        (*cfgvh).addVlogModule("intcontrol", (HSimInstFactoryPtr)IF9);
+        (*cfgvh).addVlogModule("cpu8080", (HSimInstFactoryPtr)IF10);
+        (*cfgvh).addVlogModule("testbench", (HSimInstFactoryPtr)IF11);
+        (*cfgvh).addVlogModule("glbl", (HSimInstFactoryPtr)IF12);
+        (*cfgvh).addVlogModule("vga/vga_arch", (HSimInstFactoryPtr)IF13, true);
+        (*cfgvh).addVlogModule("vga", (HSimInstFactoryPtr)IF14, true);
         HSim__s5 * topvl = 0;
         topvl = new workMcpu__tbw("cpu_tbw");
         topvl->moduleInstantiate(cfgvh);
@@ -124,6 +176,10 @@ main(int argc, char **argv) {
   globalKernel->getOptions(argc,argv);
   HSim__s6 * _top_i = 0;
   try {
+    IeeeStd_logic_1164=new Ieee_std_logic_1164("Std_logic_1164");
+    IeeeNumeric_std=new Ieee_numeric_std("Numeric_std");
+    WorkCommon=new Work_common("Common");
+    UnisimVcomponents=new Unisim_vcomponents("Vcomponents");
     HSimConfigDecl *cfg;
  _top_i = new _top();
   cfg =  _top_i->topModuleInstantiate();

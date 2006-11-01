@@ -1,2 +1,1 @@
-Error at time=                 115ns intr=0, expected=z
-          1 errors found in simulation.
+No errors or warnings.

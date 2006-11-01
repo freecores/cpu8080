@@ -5,7 +5,7 @@ run
 -ifmt mixed
 -ofn testbench
 -ofmt NGC
--p xc3s200-5-pq208
+-p xc3s1000-4-ft256
 -top testbench
 -opt_mode Speed
 -opt_level 1

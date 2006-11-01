@@ -28,7 +28,10 @@ module testbench(addr,     // Address out
                  intr,     // Interrupt request 
                  inta,     // Interrupt request 
                  waitr,    // Wait request
-                 reset,    // Reset
+                 r, g, b,  // vga colors
+                 hsync_n,  // vga horizontal sync negative
+                 vsync_n,  // vga vertical sync negative
+                 reset_n,  // Reset
                  clock);   // System clock
 
    output [15:0] addr;
@@ -40,21 +43,57 @@ module testbench(addr,     // Address out
    output intr;
    output inta;
    input  waitr;
-   input  reset;
+   output [2:0] r, g, b; // R,G,B color output buses
+   output       hsync_n; // horizontal sync pulse
+   output       vsync_n; // vertical sync pulse
+   input  reset_n;
    input  clock;
+
+   reg [7:0] clkdiv;
+   wire clocki;
+   wire reset;
+
+   initial clkdiv = 0;
+
+   // divide down the clock so we can debug
+   always @(posedge clock) clkdiv <= clkdiv+1; // count
+   assign clocki = clkdiv[3]; // pick off top bit as internal clock
+//   assign clocki = clock;
+
+   //
+   // Instantiations
+   //
 
    // selector block, we only use select 1, 2 and 3
    select select1(addr, data, readio, writeio, romsel, ramsel, intsel, 
-                  select4, bootstrap, clock, reset);
+                  trmsel, bootstrap, clocki, reset);
 
+   // 8080 CPU
    cpu8080 cpu(addr, data, readmem, writemem, readio, writeio, intr, inta, waitr,
-               reset, clock);
+               reset, clocki);
+// assign readmem = 0;
+// assign writemem = 0;
+// assign readio = 0;
+// assign writeio = 0;
+// assign inta = 0;
+// assign addr = 0;
+
+   // Program rom
    rom rom(addr[9:0], data, romsel&readmem); // unclocked rom
+
    // neg clocked ram
-   ram ram(addr[9:0], data, ramsel, readmem, writemem, bootstrap, clock);
+   ram ram(addr[9:0], data, ramsel, readmem, writemem, bootstrap, clocki);
+
    // neg clocked interrupt controller
    intcontrol intc(addr[2:0], data, writeio, readio, intsel, intr, inta, int0, int1,
-                   int2, int3, int4, int5, int6, int7, reset, clock);
+                   int2, int3, int4, int5, int6, int7, reset, clocki);
+
+   // ADM3A dumb terminal
+   terminal adm3a(addr[0], data, writeio, readio, trmsel, r, g, b, hsync_n, vsync_n,
+                  reset, clock);
+
+   // generate reset
+   assign reset = !reset_n;
 
    // pull up unused interrupt lines
    assign int0 = 1;
@@ -65,8 +104,6 @@ module testbench(addr,     // Address out
    assign int5 = 1;
    assign int6 = 1;
    assign int7 = 1;
-   // fake input device, always returns $42
-   assign data = readio ? 8'h42: 8'bz;
 
 endmodule
 
@@ -390,10 +427,10 @@ module intcontrol(addr, data, write, read, select, intr, inta, int0, int1, int2,
    reg [7:0] intne;    // negative edge interrupt detection
    reg [7:0] datai; // data from output selector
    reg [3:0] state; // state machine to run vectors
-
+    
    wire [7:0] activep;  // interrupt active pending
 
-   // handle register reads and writes
+   // handle register reads and writes  
 
    always @(negedge clock)
       if (reset) begin // reset
@@ -510,7 +547,7 @@ module intcontrol(addr, data, write, read, select, intr, inta, int0, int1, int2,
    assign intr = |active; // request interrupt on any active
 
 endmodule
-
+        
 ////////////////////////////////////////////////////////////////////////////////
 //
 // ROM CELL
