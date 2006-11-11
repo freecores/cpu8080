@@ -8,10 +8,23 @@
 <msg type="info" file="Par" num="282" delta="unknown" >No user timing constraints were detected or you have set the option to ignore timing constraints (&quot;par -x&quot;). Place and Route will run in &quot;Performance Evaluation Mode&quot; to automatically improve the performance of all internal clocks in this design. The PAR timing summary will list the performance achieved for each clock. Note: For the fastest runtime, set the effort level to &quot;std&quot;.  For best performance, set the effort level to &quot;high&quot;. For a balance between the fastest runtime and best performance, set the effort level to &quot;med&quot;.
 </msg>
 
-<msg type="warning" file="Route" num="447" delta="unknown" >CLK Net:<arg fmt="%s" index="1">reset_n_BUFGP</arg> may have excessive skew because 
+<msg type="warning" file="Place" num="837" delta="unknown" >Partially locked IO Bus is found. 
+<arg fmt="%s" index="1"> Following components of the bus are not locked: 
+	 Comp: addr&lt;15&gt;
+	 Comp: addr&lt;14&gt;
+	 Comp: addr&lt;13&gt;
+	 Comp: addr&lt;12&gt;
+	 Comp: addr&lt;11&gt;
+	 Comp: addr&lt;10&gt;
+	 Comp: addr&lt;9&gt;
+	 Comp: addr&lt;8&gt;
+</arg>
 </msg>
 
-<msg type="warning" file="Route" num="447" delta="unknown" >CLK Net:<arg fmt="%s" index="1">clkdiv&lt;3&gt;</arg> may have excessive skew because 
+<msg type="info" file="Place" num="834" delta="unknown" >Only a subset of IOs are locked. Out of <arg fmt="%d" index="1">54</arg> IOs, <arg fmt="%d" index="2">46</arg> are locked and <arg fmt="%d" index="3">8</arg> are not locked. <arg fmt="%s" index="4">If you would like to print the names of these IOs, please set the environment variable XIL_PAR_DESIGN_CHECK_VERBOSE to 2 (or more).</arg> 
+</msg>
+
+<msg type="warning" file="Route" num="447" delta="unknown" >CLK Net:<arg fmt="%s" index="1">reset_n_BUFGP</arg> may have excessive skew because 
 </msg>
 
 <msg type="info" file="Timing" num="2761" delta="unknown" >N/A entries in the Constraints list may indicate that the constraint does not cover any paths or that it has no requested value.</msg>

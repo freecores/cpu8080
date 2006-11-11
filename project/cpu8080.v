@@ -28,6 +28,7 @@
 //     used single byte restart instructions to form a simple interrupt       //
 //     controller, but was capable of full vectoring via insertion of a jump, //
 //     call or similar instruction.                                           //
+//                                                                            //
 //     Note that the interrupt vector instruction should branch. This is      //
 //     because the PC gets changed by the vector instruction, so if it does   //
 //     not branch, it will have skipped a number of bytes after the interrupt //
@@ -41,20 +42,14 @@
 //     and sample signals and data. The external logic theoretically uses the //
 //     negative edge to check signal assertions and sample data, but it can   //
 //     either use the negative edge, or actually be asynronous logic.         //
-//     The only caution here is that a read device that samples read signals  //
-//     from the CPU on a postive edge will present data too late, since read  //
-//     cycles are only one cycle long. This can be fixed with a wait state.   //
-//     Negative external clockers may also have an issue with the fact that   //
-//     the net read time is 1/2 cycle, the negative mid cycle clock to the    //
-//     next positive clock. Again, and perhaps unfortunately, the fix is to   //
-//     add an external wait state.                                            //
 //                                                                            //
 //     A standard read sequence is as follows:                                //
 //                                                                            //
 //     1. At the positive clock edge, readmem, readio or readint is asserted. //
 //     2. At the negative clock edge (or immediately), the external memory    //
 //        places data onto the data bus.                                      //
-//     3. At the next positive clock edge, the data is sampled, and the read  //
+//     3. We hold automatically for one cycle.                                //
+//     4. At the next positive clock edge, the data is sampled, and the read  //
 //        Signal is deasserted.                                               //
 //                                                                            //
 //     A standard write sequence is as follows:                               //
@@ -76,38 +71,41 @@
 // CPU states
 //
 
-`define cpus_idle     5'h00 // Idle
-`define cpus_fetchi   5'h01 // Instruction fetch
-`define cpus_fetchi2  5'h02 // Instruction fetch 2
-`define cpus_fetchi3  5'h03 // Instruction fetch 3
-`define cpus_halt     5'h04 // Halt (wait for interrupt)
-`define cpus_alucb    5'h05 // alu cycleback
-`define cpus_indcb    5'h06 // inr/dcr cycleback
-`define cpus_movmtbc  5'h07 // Move memory to bc
-`define cpus_movmtde  5'h08 // Move memory to de
-`define cpus_movmthl  5'h09 // Move memory to hl
-`define cpus_movmtsp  5'h0a // Move memory to sp
-`define cpus_lhld     5'h0b // LHLD
-`define cpus_jmp      5'h0c // JMP
-`define cpus_write    5'h0d // write byte
-`define cpus_write2   5'h0e // write byte #2
-`define cpus_write3   5'h0f // write byte #3
-`define cpus_write4   5'h10 // write byte #4
-`define cpus_read     5'h11 // read byte
-`define cpus_read2    5'h12 // read byte #2
-`define cpus_pop      5'h13 // POP completion
-`define cpus_in       5'h14 // IN
-`define cpus_in2      5'h15 // IN #2
-`define cpus_out      5'h16 // OUT
-`define cpus_out2     5'h17 // OUT #2
-`define cpus_out3     5'h18 // OUT #3
-`define cpus_out4     5'h19 // OUT #4
-`define cpus_movtr    5'h1a // move to register
-`define cpus_movrtw   5'h1b // move read to write
-`define cpus_movrtwa  5'h1c // move read to write address
-`define cpus_movrtra  5'h1d // move read to read address
-`define cpus_accimm   5'h1e // accumulator immediate operations
-`define cpus_daa      5'h1f // DAA completion
+`define cpus_idle     6'h00 // Idle
+`define cpus_fetchi   6'h01 // Instruction fetch
+`define cpus_fetchi2  6'h02 // Instruction fetch 2
+`define cpus_fetchi3  6'h03 // Instruction fetch 3
+`define cpus_fetchi4  6'h04 // Instruction fetch 4
+`define cpus_halt     6'h05 // Halt (wait for interrupt)
+`define cpus_alucb    6'h06 // alu cycleback
+`define cpus_indcb    6'h07 // inr/dcr cycleback
+`define cpus_movmtbc  6'h08 // Move memory to bc
+`define cpus_movmtde  6'h09 // Move memory to de
+`define cpus_movmthl  6'h0a // Move memory to hl
+`define cpus_movmtsp  6'h0b // Move memory to sp
+`define cpus_lhld     6'h0c // LHLD
+`define cpus_jmp      6'h0d // JMP
+`define cpus_write    6'h0e // write byte
+`define cpus_write2   6'h0f // write byte #2
+`define cpus_write3   6'h10 // write byte #3
+`define cpus_write4   6'h11 // write byte #4
+`define cpus_read     6'h12 // read byte
+`define cpus_read2    6'h13 // read byte #2
+`define cpus_read3    6'h14 // read byte #3
+`define cpus_pop      6'h15 // POP completion
+`define cpus_in       6'h16 // IN
+`define cpus_in2      6'h17 // IN #2
+`define cpus_in3      6'h18 // IN #3
+`define cpus_out      6'h19 // OUT
+`define cpus_out2     6'h1a // OUT #2
+`define cpus_out3     6'h1b // OUT #3
+`define cpus_out4     6'h1c // OUT #4
+`define cpus_movtr    6'h1d // move to register
+`define cpus_movrtw   6'h1e // move read to write
+`define cpus_movrtwa  6'h1f // move read to write address
+`define cpus_movrtra  6'h20 // move read to read address
+`define cpus_accimm   6'h21 // accumulator immediate operations
+`define cpus_daa      6'h22 // DAA completion
 
 //
 // Register numbers
@@ -197,7 +195,7 @@ module cpu8080(addr,     // Address out
                      
    // Local registers
     
-   reg    [4:0]  state;       // CPU state machine
+   reg    [5:0]  state;       // CPU state machine
    reg    [2:0]  regd;        // Destination register
    reg    [7:0]  datao;       // Data output register
    reg           dataeno;     // Enable output data
@@ -209,7 +207,7 @@ module cpu8080(addr,     // Address out
    reg    [7:0]  rdatahold2;  // single byte read data holding
    reg    [1:0]  popdes;      // POP destination code
    reg    [5:0]  statesel;    // state map selector
-   reg    [4:0]  nextstate;   // next state output
+   reg    [5:0]  nextstate;   // next state output
    reg           eienb;       // interrupt enable delay shift reg
    reg    [7:0]  opcode;      // opcode holding
    
@@ -284,16 +282,26 @@ module cpu8080(addr,     // Address out
        
       end
 
-      `cpus_fetchi2: begin // complete instruction memory read
+      `cpus_fetchi2: begin // wait
 
-         opcode <= data; // latch opcode
-         readmem <= 0; // Deactivate instruction memory read
-         inta <= 0; // and interrupt acknowledge
          state <= `cpus_fetchi3; // next state
+
+       end
+
+      `cpus_fetchi3: begin // complete instruction memory read
+
+         if (!waitr) begin // no wait selected, otherwise cycle
+
+            opcode <= data; // latch opcode
+            readmem <= 0; // Deactivate instruction memory read
+            inta <= 0; // and interrupt acknowledge
+            state <= `cpus_fetchi4; // next state
+
+         end
          
       end
        
-      `cpus_fetchi3: begin // complete instruction memory read
+      `cpus_fetchi4: begin // complete instruction memory read
           
          // We split off the instructions into 4 groups. Most of the 8080
          // instructions are in the MOV and ACC operations class.
@@ -1078,12 +1086,19 @@ module cpu8080(addr,     // Address out
          addr <= raddrhold; // place address on output
          raddrhold <= raddrhold+1; // next address
          if (intcyc) inta <= 1; // activate interrupt acknowledge
-         else readmem <= 1; // activate instruction memory read
+         else readmem <= 1; // activate memory read
          state <= `cpus_read2; // next state
          
       end
 
       `cpus_read2: begin // continue read #2
+
+         // wait one cycle
+         state <= `cpus_read3; // next state
+
+      end
+
+      `cpus_read3: begin // continue read #3
 
          if (!waitr) begin // no wait selected, otherwise cycle
 
@@ -1140,10 +1155,21 @@ module cpu8080(addr,     // Address out
       end
 
       `cpus_in2: begin // input single byte to A #2
+         
+         // wait one cycle
+         state <= `cpus_in3; // continue
 
-         regfil[`reg_a] <= data; // place input data
-         readio <= 0; // clear read I/O
-         state <= `cpus_fetchi; // Fetch next instruction
+      end
+
+      `cpus_in3: begin // input single byte to A #3
+
+         if (!waitr) begin // no wait selected, otherwise cycle
+
+            regfil[`reg_a] <= data; // place input data
+            readio <= 0; // clear read I/O
+            state <= `cpus_fetchi; // Fetch next instruction
+
+         end
 
       end
 
@@ -1165,8 +1191,12 @@ module cpu8080(addr,     // Address out
 
       `cpus_out3: begin // continue out #3
 
-         writeio <= 0; // disable write I/O data
-         state <= `cpus_out4; // idle hold time
+         if (!waitr) begin // no wait selected, otherwise cycle
+
+            writeio <= 0; // disable write I/O data
+            state <= `cpus_out4; // idle hold time
+
+         end
 
       end
 

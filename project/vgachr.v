@@ -17,6 +17,10 @@
 // Revision 0.01 - File Created
 // Additional Comments: 
 //
+// Simulation plugs exist in this code. Look for "????? SIMULATION PLUG"
+//
+// Debug plugs exist in this code. Look for "????? DEBUG PLUG"
+//
 //////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -49,6 +53,30 @@
 // but a stupid application that relies on this "smart" implementation might
 // fail to run on the real thing.
 //
+// The ADM 3A terminal emulation is based on "ADM 3A Dumb Terminal Users
+// Reference Manual" of April, 1986.
+//
+// It performs the basic cursor motions, but there was no way to know what many
+// of the exact cursor actions would have been in the real terminal, because
+// those kinds of things are undocumented. This includes what occurs when the
+// cursor moves left when already at the extreme left hand side, up when already
+// at the top, if the cursor is moved to home on clear, etc. I am sure there are
+// plenty of others, these will just have to be implemented as I find out more
+// information, or encounter programs that rely on these features.
+//
+// These are terminal features there is no plans to implement:
+//
+// 1. ENQ or answerback mode.
+// 2. Bell (where would it go?).
+// 3. Ctrl-N and Ctrl-O keyboard locking and extention port.
+// 4. Graphics modes (I don't believe this was in the original ADM 3A in any
+//    case, but added later).
+//
+// These are terminal features that are not implemented, but will be:
+//
+// 1. Absolute cursor positioning.
+// 2. Attribute codes.
+//
 
 //
 // Terminal height and width
@@ -59,30 +87,43 @@
 //
 // Terminal states
 //
-`define term_idle    6'h00 // idle
-`define term_wrtstd2 6'h01 // write standard character #2
-`define term_wrtstd3 6'h02 // write standard character #3
-`define term_clear   6'h03 // clear screen and home cursor
-`define term_clear2  6'h04 // clear screen and home cursor #2
-`define term_clear3  6'h05 // clear screen and home cursor #3
-`define term_clear4  6'h06 // clear screen and home cursor #4
+`define term_idle    4'h0 // idle
+`define term_wrtstd2 4'h1 // write standard character #2
+`define term_wrtstd3 4'h2 // write standard character #3
+`define term_wrtstd4 4'h3 // write standard character #4
+`define term_clear   4'h4 // clear screen and home cursor
+`define term_clear2  4'h5 // clear screen and home cursor #2
+`define term_clear3  4'h6 // clear screen and home cursor #3
+`define term_clear4  4'h7 // clear screen and home cursor #4
+`define term_fndstr  4'h8 // find start of current line
+`define term_scroll  4'h9 // scroll screen
+`define term_scroll1 4'ha // scroll screen #1
+`define term_scroll2 4'hb // scroll screen #2
+`define term_scroll3 4'hc // scroll screen #3
+`define term_scroll4 4'hd // scroll screen #4
+`define term_scroll5 4'he // scroll screen #5
+`define term_scroll6 4'hf // scroll screen #6
 
 module terminal(addr, data, write, read, select, r, g, b, hsync_n, vsync_n,
-                reset, clock);
+                ps2_clk, ps2_data, reset, clock, diag);
 
-   input        addr;    // control reg/data reg address
-   inout [7:0]  data;    // CPU data
-   input        write;   // CPU write
-   input        read;    // CPU read
-   input        select;  // controller select
-   input        reset;   // CPU reset
-   input        clock;   // CPU clock
-   output [2:0] r, g, b; // R,G,B color output buses
-   output       hsync_n; // horizontal sync pulse
-   output       vsync_n; // vertical sync pulse
+   input        addr;     // control reg/data reg address
+   inout [7:0]  data;     // CPU data
+   input        write;    // CPU write
+   input        read;     // CPU read
+   input        select;   // controller select
+   input        reset;    // CPU reset
+   input        clock;    // CPU clock
+   output [2:0] r, g, b;  // R,G,B color output buses
+   output       hsync_n;  // horizontal sync pulse
+   output       vsync_n;  // vertical sync pulse
+   input        ps2_clk;  // clock from keyboard
+   input        ps2_data; // data from keyboard
+   output [7:0] diag;     // diagnostic 8 bit port
 
-   reg [5:0]   state;   // terminal state machine
+   reg [3:0]   state;   // terminal state machine
    reg [10:0]  cursor;  // cursor address
+   reg [10:0]  tcursor; // cursor temp address
    reg [7:0]   chrdatw; // character write data
    reg         outrdy;  // output ready to send
    reg         wrtchr;  // character ready to write
@@ -96,141 +137,411 @@ module terminal(addr, data, write, read, select, r, g, b, hsync_n, vsync_n,
    reg   [7:0] cmdatai; // character map data to be written
    reg         cmdatae; // character map data enable
 
+   // keyboard communication
+   wire   [7:0] scancode;   // key scancode
+   wire         parity;     // keyboard parity
+   wire         busy;       // busy scanning code
+   wire         rdy;        // ready with code
+   wire         error;      // scancode error
+   reg          scnrdy;     // scancode 
+   reg          capslock;   // caps lock toggle
+   reg          leftshift;  // state of left shift key
+   reg          rightshift; // state of right shift key
+   reg          leftctrl;   // state of left control key
+   reg          rightctrl;  // state of right control key
+   reg          relcod;     // release code active
+   reg          extcod;     // extention code active
+   wire   [7:0] asciidata;  // output of lookup rom
+   wire   [7:0] asciidatau; // output of lookup rom
+   reg          clrrdy;     // clear input ready
+
+   // here we put signals out the diagnostic port if required.
+   assign diag[0] = busy;
+   assign diag[1] = rdy;
+   assign diag[2] = scnrdy;
+   assign diag[3] = ps2_clk;
+   assign diag[4] = ps2_data;
+   assign diag[5] = relcod;
+   assign diag[6] = leftctrl;
+   assign diag[7] = rightctrl;
+
    // instantiate memory mapped character display
    chrmemmap display(!reset, clock, r, g, b, hsync_n, vsync_n, cmaddr, cmread,
-                     cmwrite, cmdata);
+                     cmwrite, cmdata, cursor);
 
-   // instantiate ps/2 keyboard
+   // instantiate ps/2 keyboard. Note that the keyboard decoder only generates
+   // codes on release, which has to be changed, since we need both asserts and
+   // deasserts.
    ps2_kbd vgai(.clk(clock), .rst(reset), .ps2_clk(ps2_clk), .ps2_data(ps2_data),
                 .scancode(scancode), .parity(parity), .busy(busy), .rdy(rdy),
                 .error(error));
 
-//   always @(posedge clock)
-   always @(negedge clock)
+   // instantiate keyboard scan lookup roms
+   scnrom kbdtbl(scancode, asciidata); // lower case
+   scnromu kbdtblu(scancode, asciidatau); // lower case
+
+   // process keyboard input state
+   always @(posedge clock)
+      if (reset) begin // perform reset actions
+   
+         leftshift <= 0; // clear left shift key state
+         rightshift <= 0; // clear right shift key state
+         leftctrl <= 0; // clear left control key state
+         rightctrl <= 0; // clear right control key state
+         capslock <= 0; // clear caps lock state
+         relcod <= 0; // clear release status
+         scnrdy <= 0; // clear key ready
+
+   end else begin
+
+      if (rdy) begin
+
+          // if the release code $f0 occurs, set release until the next key occurs
+          if (scancode == 8'hf0) relcod <= 1;
+          // if the extention code $e0 occurs, set the extention flag
+          if (scancode == 8'he0) extcod <= 1;
+          else if (relcod) begin // release
+
+             relcod <= 0; // reset release code
+             // reset any extention code
+             if (scancode != 8'hf0 && scancode != 8'he0) extcod <= 0;
+             // if caps lock is hit, toggle caps lock status
+             if (scancode == 8'h58) capslock <= !capslock;
+             // process left and right shift key up
+             if (scancode == 8'h12) leftshift <= 0; // left up
+             if (scancode == 8'h59) rightshift <= 0; // right up
+             // process control key up
+             if (scancode == 8'h14) begin
+
+                if (extcod) rightctrl <= 0; // right up
+                else leftctrl <= 0; // left up
+
+             end
+
+          end else begin // assert
+
+             scnrdy <= 1; // set key is ready
+             // reset any extention code
+             if (scancode != 8'hf0 && scancode != 8'he0) extcod <= 0;
+             // process left and right shift key down
+             if (scancode == 8'h12) leftshift <= 1; // left down
+             if (scancode == 8'h59) rightshift <= 1; // right down
+             // process control key down
+             if (scancode == 8'h14) begin
+
+                if (extcod) rightctrl <= 1; // right down
+                else leftctrl <= 1; // left down
+
+             end
+
+          end
+
+      end else if (clrrdy) scnrdy <= 0; // clear key ready
+
+   end
+
+   always @(posedge clock)
       if (reset) begin // reset
 
          // on reset, we set the state machine to perform a screen clear and
          // home cursor
+         // ????? SIMULATION PLUG
+         // Don't clear screen, this takes too long in simulation
          state <= `term_clear; // set to clear screen
+         // state <= `term_idle; // continue
          cursor <= 0; // set cursor to home
          outrdy <= 0; // set not ready to send
          wrtchr <= 0; // set no character to write
          cmread <= 0; // clear read character
          cmwrite <= 0; // clear write character
          cmdatae <= 0; // no enable character map data
+         clrrdy <= 0; // set clear ready off
+                      
+   end else begin
 
-   end else if (write&select) begin // CPU write
+      if (write&select) begin // CPU write
 
-      if (addr) begin
+         if (addr) begin
+      
+            chrdatw <= data & 8'h7f; // set character write data without parity
+            wrtchr <= 1; // character ready to write
+            outrdy <= 0; // remove ready to send
+      
+         end
+      
+      end else if (read&select) begin // CPU read
+      
+         if (addr) begin
+      
+            // Return decoded keyboard, with shifting. The letter keys, 'a'-'z',
+            // can be shifted by the shift keys, but not by caps lock state.
+            // The other keys can be shifted by either. This matches PC 
+            // behavior, which lets you have cap locks on without shifting the
+            // letter keys. The control codes are shifted as a block from `($60)
+            // to ~($7e) down to $00. This leaves out \US and \DEL, but these
+            // codes get generated by the DEL key.
+            if (asciidata >= 8'h60 && asciidata <= 8'h7e && (leftctrl || rightctrl))
+               datao <= asciidata & 8'h1f;
+            else if (asciidata >= 8'h61 && asciidata <= 8'h7a)
+               datao <= leftshift||rightshift||capslock ? asciidatau: asciidata;
+            else 
+               datao <= leftshift||rightshift ? asciidatau: asciidata;
+            clrrdy <= 1; // clear scancode ready f/f
+      
+         end else 
+            datao <= (!outrdy << 7) | (scnrdy << 5); // return ready statuses
+      
+      end else clrrdy <= 0; // clear keyboard ready signal
 
-         chrdatw <= data & 8'h7f; // set character write data without parity
-         wrtchr <= 1; // character ready to write
-         outrdy <= 0; // remove ready to send
+      case (state) // run output state
+      
+         `term_idle: begin // idle waiting for character
+      
+            // We wait for the cpu cycle to end before running the state machine
+            // write procedure. This allows this module to run at full speed, 
+            // while the rest of the CPU logic runs slow. The vga logic must run
+            // at a fixed speed because it has the display to run, but the rest
+            // can be slow to allow debugging.
+            if (wrtchr&!(select&read|select&write)) begin 
 
-      end
+               // process character after CPU goes away
+               if (chrdatw >= 8'h20 && chrdatw != 8'h7f) begin
+      
+                  // write standard (non-control) character
+                  cmaddr <= cursor; // set address at cursor
+                  cmdatai <= chrdatw; // place character data to write
+                  cmdatae <= 1; // enable data to memory
+                  state <= `term_wrtstd2; // continue
+      
+               end else begin // control character
+      
+                  if (chrdatw == 8'h0a) begin // line down (line feed)
+                  
+                     if (cursor < 23*80) begin // not at screen end
 
-   end else if (read&select) begin // CPU read
+                        cursor <= cursor+80;
+                        wrtchr <= 0; // remove ready to write
+                        outrdy <= 1; // set ready to send
 
-      if (addr) datao <= 0; // no keyboard data implemented yet
-      else datao <= !outrdy << 7; // return output ready status
+                     end else begin
 
-   end else case (state) // run output state
+                        tcursor <= 0; // set temp cursor to screen start
+                        state <= `term_scroll; // go to scroll screen
 
-      `term_idle: begin // idle waiting for character
+                      end
+                  
+                  end else if (chrdatw == 8'h0b) begin // line up
+                  
+                     if (cursor >= 80) cursor <= cursor-80;
+                     wrtchr <= 0; // remove ready to write
+                     outrdy <= 1; // set ready to send
+                  
+                  end else if (chrdatw == 8'h0d) begin // carriage return
+                  
+                     tcursor <= 0; // set start of line cursor
+                     state <= `term_fndstr; // go to find start of line
 
-         // We wait for the cpu cycle to end before running the state machine
-         // write procedure. This allows this module to run at full speed, while
-         // the rest of the CPU logic runs slow. The vga logic must run at a 
-         // fixed speed because it has the display to run, but the rest can be
-         // slow to allow debugging.
-         if (wrtchr&!select) begin // process character after CPU goes away
+                  end else if (chrdatw == 8'h08) begin // character left
+                  
+                     // if not at home position, back up
+                     if (cursor > 0) cursor <= cursor-1;
+                     wrtchr <= 0; // remove ready to write
+                     outrdy <= 1; // set ready to send
 
-            if (chrdatw >= 8'h20 && chrdatw != 8'h7f) begin
+                  end else if (chrdatw == 8'h0c) begin // character right
+                  
+                     // if not at screen end, go forward
+                     if (cursor < 80*24-1) cursor <= cursor+1;
+                     wrtchr <= 0; // remove ready to write
+                     outrdy <= 1; // set ready to send
 
-               // write standard (non-control) character
-               cmaddr <= cursor; // set address at cursor
-               cmdatai <= chrdatw; // place character data to write
-               cmdatae <= 1; // enable data to memory
-               outrdy <= 0; // set not ready to send
-               state <= `term_wrtstd2; // continue
+                  end else if (chrdatw == 8'h1e) begin // home
+                  
+                     cursor <= 0; // set to home position
+                     wrtchr <= 0; // remove ready to write
+                     outrdy <= 1; // set ready to send
+                  
+                  end else if (chrdatw == 8'h1a) begin // clear screen
 
-            end else begin // control character, just dump it for now
+                     state <= `term_clear; // go to screen clear
+                     wrtchr <= 0; // remove ready to write
+                     outrdy <= 1; // set ready to send
+
+                  end else begin // unsupported control character
+
+                     wrtchr <= 0; // remove ready to write
+                     outrdy <= 1; // set ready to send
+
+                  end
+      
+               end
+                  
+            end
+      
+         end
+      
+         `term_wrtstd2: begin // write standard character #2
+      
+            cmwrite <= 1; // set write to memory
+            state <= `term_wrtstd3; // continue
+      
+         end
+      
+         `term_wrtstd3: begin // write standard character #3
+      
+            cmwrite <= 0; // remove write to memory
+            state <= `term_wrtstd4; // continue
+           
+         end
+
+         `term_wrtstd4: begin // write standard character #3
+      
+            cmdatae <= 0; // release data enable to memory
+            outrdy <= 1; // set ready to send
+            cursor <= cursor+1; // advance cursor
+            wrtchr <= 0; // remove ready to write
+            state <= `term_idle; // continue
+           
+         end
+      
+         `term_clear: begin // clear screen and home cursor
+      
+            cmaddr <= 0; // clear buffer address
+            cmdatai <= 8'h20; // clear to spaces
+            cmdatae <= 1; // enable data to memory
+            state <= `term_clear2; // continue
+       
+         end
+      
+         `term_clear2: begin // clear screen and home cursor #2
+      
+            cmwrite <= 1; // set write to memory
+            state <= `term_clear3; // continue
+      
+         end
+      
+         `term_clear3: begin // clear screen and home cursor #2
+      
+            cmwrite <= 0; // reset write to memory
+            state <= `term_clear4; // continue
+      
+         end
+      
+         `term_clear4: begin // clear screen and home cursor #4
+      
+            if (cmaddr < `scnchrs*`scnlins) begin
+      
+               cmaddr <= cmaddr+1; // next character
+               // Uncomment the next to put an incrementing pattern instead of
+               // spaces.
+               //cmdatai <= cmdatai+1;
+               state <= `term_clear2; // continue
+      
+            end else begin // done
+      
+               outrdy <= 1; // set ready to send
+               cursor <= 0; // set cursor to home position
+               cmdatae <= 0; // release data enable to memory
+               state <= `term_idle; // continue
+               
+            end
+      
+         end
+
+         `term_fndstr: begin // find start of current line
+
+            if (tcursor+80 > cursor) begin // found
+
+               cursor <= tcursor; // set cursor to line start
+               wrtchr <= 0; // remove ready to write
+               outrdy <= 1; // set ready to send
+               state <= `term_idle; // continue
+
+            end else tcursor <= tcursor+80; // advance to next line
+
+         end
+
+         `term_scroll: begin // scroll screen up
+
+            // move all data up a line
+            if (tcursor < 80*23) begin // scroll up
+
+               cmread <= 1; // set read display
+               cmaddr <= tcursor+80; // set address to read
+               state <= `term_scroll1; // continue
+               
+            end else state <= `term_scroll5; // go blank last line
+
+         end
+
+         `term_scroll1: begin // scroll screen up #1
+
+            state <= `term_scroll2; // hold read
+
+         end
+
+         `term_scroll2: begin // scroll screen up #2
+
+            cmdatai <= cmdata; // get data at address
+            cmread <= 0; // turn off read
+            state <= `term_scroll3; // continue
+
+         end
+
+         `term_scroll3: begin // scroll screen up #3
+
+            cmdatae <= 1; // enable data to write
+            cmwrite <= 1; // set to write
+            cmaddr <= tcursor;
+            state <= `term_scroll4; // continue
+
+         end
+
+         `term_scroll4: begin // scroll screen up #4
+
+            cmwrite <= 0; // turn off write
+            cmdatae <= 0; // turn off enable
+            tcursor <= tcursor+1; // next address
+            state <= `term_scroll; // repeat character move
+
+         end
+
+         `term_scroll5: begin // scroll screen up #5
+
+            // blank out last line
+            if (tcursor < 80*24) begin // blank out
+
+               cmdatai <= 8'h20; // set to write spaces
+               cmdatae <= 1; // enable data to write
+               cmwrite <= 1; // set to write
+               cmaddr <= tcursor;
+               state <= `term_scroll6; // continue
+
+            end else begin // terminate
 
                wrtchr <= 0; // remove ready to write
                outrdy <= 1; // set ready to send
+               state <= `term_idle; // continue
 
             end
-               
+
          end
 
-      end
+         `term_scroll6: begin // scroll screen up #6
 
-      `term_wrtstd2: begin // write standard character #2
+            cmwrite <= 0; // turn off write
+            cmdatae <= 0; // turn off enable
+            tcursor <= tcursor+1; // next address
+            state <= `term_scroll5; // repeat blank out
 
-         cmwrite <= 1; // set write to memory
-         state <= `term_wrtstd3; // continue
-
-      end
-
-      `term_wrtstd3: begin // write standard character #3
-
-         cmwrite <= 0; // remove write to memory
-         cmdatae <= 0; // release data enable to memory
-         outrdy <= 1; // set ready to send
-         cursor <= cursor+1; // advance cursor
-         wrtchr <= 0; // remove ready to write
-         state <= `term_idle; // continue
-        
-      end
-
-      `term_clear: begin // clear screen and home cursor
-
-         cmaddr <= 0; // clear buffer address
-         cmdatai <= 8'h20; // clear to spaces
-         cmdatae <= 1; // enable data to memory
-         state <= `term_clear2; // continue
-    
-      end
-
-      `term_clear2: begin // clear screen and home cursor #2
-
-         cmwrite <= 1; // set write to memory
-         state <= `term_clear3; // continue
-
-      end
-
-      `term_clear3: begin // clear screen and home cursor #2
-
-         cmwrite <= 0; // reset write to memory
-         state <= `term_clear4; // continue
-
-      end
-
-      `term_clear4: begin // clear screen and home cursor #4
-
-         if (cmaddr < `scnchrs*`scnlins) begin
-
-            cmaddr <= cmaddr+1; // next character
-            // Uncomment the next to put an incrementing pattern instead of
-            // spaces.
-            //cmdatai <= cmdatai+1;
-            state <= `term_clear2; // continue
-
-         end else begin // done
-
-            outrdy <= 1; // set ready to send
-            cursor <= 0; // set cursor to home position
-            cmdatae <= 0; // release data enable to memory
-            state <= `term_idle; // continue
-            
          end
+      
+         default: state <= 6'bx;
+      
+      endcase
 
-      end
-
-      default: state <= 6'bx;
-
-   endcase
-
+   end
+      
    // Enable drive to character memory
    assign cmdata = cmdatae ? cmdatai: 8'bz;
 
@@ -252,7 +563,7 @@ endmodule
 //
 
 module chrmemmap(rst_n, clk, r, g, b, hsync_n, vsync_n, addr, read, write, 
-                 data);
+                 data, cursor);
 
       input         rst_n;   // reset
       input         clk;     // master clock
@@ -263,6 +574,7 @@ module chrmemmap(rst_n, clk, r, g, b, hsync_n, vsync_n, addr, read, write,
       input         read;    // read from address
       input         write;   // write from address
       inout  [7:0]  data;    // data to be written/read
+      input [10:0]  cursor;  // cursor address
 
    reg [15:0] pixeldata; // 16 bit pixel feed
 
@@ -275,6 +587,7 @@ module chrmemmap(rst_n, clk, r, g, b, hsync_n, vsync_n, addr, read, write,
    wire [10:0] chradr;  // character generator address
    wire [7:0]  chrdata; // character generator data
    reg  [7:0]  datao;   // intermediate for data output
+   reg  [7:0]  pixdatl; // pixel data low holding
 
    // storage for character based screen
 
@@ -290,13 +603,29 @@ module chrmemmap(rst_n, clk, r, g, b, hsync_n, vsync_n, addr, read, write,
 
    // run the character to screen scan
    always @(posedge clk)
-      if (rst|eof) begin // if reset or end of frame
+      if (rst) begin // if reset
+
+      // ????? SIMULATION PLUG
+      // starting the character counter at the end of the line allows the scan
+      // to cross the area the CPU is filling, and is ok at hardware time.
+      // chrcnt <= 7'h0; // clear counters
+      chrcnt <= 80-20; // clear counters
+      // ????? SIMULATION PLUG
+      // Starting the row count at 1 allows pixels to appear on the simulation,
+      // and produces only a single bad line in real hardware
+      rowcnt <= 5'h0;
+      // rowcnt <= 5'h1;
+      lincnt <= 5'h0;
+      scnadr <= 11'h0;
+      fchsta <= 0;
+
+   end else if (eof) begin // if end of frame
 
       chrcnt <= 7'h0; // clear counters
       rowcnt <= 5'h0;
       lincnt <= 5'h0;
       scnadr <= 11'h0;
-      fchsta <= 0;
+      fchsta <= 1; // set to fetch first set of characters
 
    end else if (rd || fchsta) begin
 
@@ -328,8 +657,13 @@ module chrmemmap(rst_n, clk, r, g, b, hsync_n, vsync_n, addr, read, write,
 
          1: begin
    
-            // set low bits of pixel register
-            pixeldata <=  { chrdata[0], chrdata[1], chrdata[2], chrdata[3],
+            // Set low bits of pixel register, with all bits set if cursor
+            // and row match.
+            if (scnadr+chrcnt == cursor)
+               pixdatl <= ~{ chrdata[0], chrdata[1], chrdata[2], chrdata[3],
+                             chrdata[4], chrdata[5], chrdata[6], chrdata[7] };
+            else 
+               pixdatl <= { chrdata[0], chrdata[1], chrdata[2], chrdata[3],
                             chrdata[4], chrdata[5], chrdata[6], chrdata[7] };
             fchsta <= 2; // next state
    
@@ -339,11 +673,17 @@ module chrmemmap(rst_n, clk, r, g, b, hsync_n, vsync_n, addr, read, write,
 
          3: begin
    
-            // set just high bits of pixel register
-            pixeldata <= 
-               pixeldata & 16'h00ff |
-               { chrdata[0], chrdata[1], chrdata[2], chrdata[3],
-                 chrdata[4], chrdata[5], chrdata[6], chrdata[7] } << 8;
+            // Set just high bits of pixel register, with all bits set if cursor
+            // and row match.
+            if (scnadr+chrcnt == cursor) 
+               pixeldata <= pixdatl |
+                 (~{ chrdata[0], chrdata[1], chrdata[2], chrdata[3],
+                     chrdata[4], chrdata[5], chrdata[6], chrdata[7] } & 
+                  8'hff) << 8;
+            else 
+               pixeldata <= pixdatl |
+                 { chrdata[0], chrdata[1], chrdata[2], chrdata[3],
+                   chrdata[4], chrdata[5], chrdata[6], chrdata[7] } << 8;
             fchsta <= 0; // back to start
             
          end
@@ -356,7 +696,7 @@ module chrmemmap(rst_n, clk, r, g, b, hsync_n, vsync_n, addr, read, write,
    always @(posedge clk) begin
 
       // set current indexed character without parity
-      assign curchr = scnbuf[scnadr+chrcnt] & 8'h7f;
+      curchr <= scnbuf[scnadr+chrcnt] & 8'h7f;
       if (write) scnbuf[addr] <= data;
       datao <= scnbuf[addr];
 
@@ -388,7 +728,14 @@ module chrrom(addr, data);
 
    always @(addr) case (addr)
 
-      // character set starting with space, and ending with '~'
+      // Character set starting with space, and ending with '~'
+
+      // The design of characters is such that they are embedded into an odd
+      // number of pixels, 7x19, with one space pixel to the right and bottom
+      // of each cell. The character layout works best on an odd cell width
+      // and height, because this gives a clear center to the character.
+      // Each characters baseline is marked. The baseline is where the capital
+      // characters sit, and only the descenders go below this position.
 
       11'h000: data = 8'b00000000; // ' '
       11'h001: data = 8'b00000000;
@@ -411,7 +758,7 @@ module chrrom(addr, data);
       11'h012: data = 8'b00000000;
       11'h013: data = 8'b00000000;
 
-      11'h014: data = 8'b00000000; // '!'
+      11'h014: data = 8'b00010000; // '!'
       11'h015: data = 8'b00010000;
       11'h016: data = 8'b00010000;
       11'h017: data = 8'b00010000;
@@ -421,12 +768,12 @@ module chrrom(addr, data);
       11'h01B: data = 8'b00010000;
       11'h01C: data = 8'b00010000;
       11'h01D: data = 8'b00010000;
-      11'h01E: data = 8'b00010000;
-      11'h01F: data = 8'b00000000;
-      11'h020: data = 8'b00000000;
-      11'h021: data = 8'b00010000;
-      11'h022: data = 8'b00010000;
-      11'h023: data = 8'b00000000;
+      11'h01E: data = 8'b00000000;
+      11'h01F: data = 8'b00010000;
+      11'h020: data = 8'b00010000;
+      11'h021: data = 8'b00000000; // B
+      11'h022: data = 8'b00000000;
+      11'h023: data = 8'b00000000;  
       11'h024: data = 8'b00000000;
       11'h025: data = 8'b00000000;
       11'h026: data = 8'b00000000;
@@ -445,7 +792,7 @@ module chrrom(addr, data);
       11'h032: data = 8'b00000000;
       11'h033: data = 8'b00000000;
       11'h034: data = 8'b00000000;
-      11'h035: data = 8'b00000000;
+      11'h035: data = 8'b00000000; // B
       11'h036: data = 8'b00000000;
       11'h037: data = 8'b00000000;
       11'h038: data = 8'b00000000;
@@ -454,20 +801,20 @@ module chrrom(addr, data);
       11'h03B: data = 8'b00000000;
 
       11'h03C: data = 8'b00000000; // '#'
-      11'h03D: data = 8'b00100100;
-      11'h03E: data = 8'b00100100;
-      11'h03F: data = 8'b00100100;
-      11'h040: data = 8'b00100100;
-      11'h041: data = 8'b01111110;
-      11'h042: data = 8'b00100100;
-      11'h043: data = 8'b00100100;
-      11'h044: data = 8'b00100100;
-      11'h045: data = 8'b00100100;
-      11'h046: data = 8'b01111110;
-      11'h047: data = 8'b00100100;
-      11'h048: data = 8'b00100100;
-      11'h049: data = 8'b00100100;
-      11'h04A: data = 8'b00100100;
+      11'h03D: data = 8'b01000100;
+      11'h03E: data = 8'b01000100;
+      11'h03F: data = 8'b01000100;
+      11'h040: data = 8'b01000100;
+      11'h041: data = 8'b11111110;
+      11'h042: data = 8'b01000100;
+      11'h043: data = 8'b01000100;
+      11'h044: data = 8'b01000100;
+      11'h045: data = 8'b01000100;
+      11'h046: data = 8'b11111110;
+      11'h047: data = 8'b01000100;
+      11'h048: data = 8'b01000100;
+      11'h049: data = 8'b01000100; // B
+      11'h04A: data = 8'b01000100;
       11'h04B: data = 8'b00000000;
       11'h04C: data = 8'b00000000;
       11'h04D: data = 8'b00000000;
@@ -476,18 +823,18 @@ module chrrom(addr, data);
 
       11'h050: data = 8'b00000000; // '$'
       11'h051: data = 8'b00010000;
-      11'h052: data = 8'b00111100;
-      11'h053: data = 8'b01010010;
-      11'h054: data = 8'b01010000;
-      11'h055: data = 8'b01010000;
-      11'h056: data = 8'b00110000;
-      11'h057: data = 8'b00011000;
+      11'h052: data = 8'b01111100;
+      11'h053: data = 8'b10010010;
+      11'h054: data = 8'b10010000;
+      11'h055: data = 8'b10010000;
+      11'h056: data = 8'b01010000;
+      11'h057: data = 8'b00111000;
       11'h058: data = 8'b00010100;
       11'h059: data = 8'b00010010;
       11'h05A: data = 8'b00010010;
       11'h05B: data = 8'b00010010;
       11'h05C: data = 8'b01010100;
-      11'h05D: data = 8'b00111000;
+      11'h05D: data = 8'b00111000; // B
       11'h05E: data = 8'b00010000;
       11'h05F: data = 8'b00000000;
       11'h060: data = 8'b00000000;
@@ -508,7 +855,7 @@ module chrrom(addr, data);
       11'h06E: data = 8'b00010000;
       11'h06F: data = 8'b00100000;
       11'h070: data = 8'b00101110;
-      11'h071: data = 8'b01001010;
+      11'h071: data = 8'b01001010; // B
       11'h072: data = 8'b01001110;
       11'h073: data = 8'b00000000;
       11'h074: data = 8'b00000000;
@@ -529,7 +876,7 @@ module chrrom(addr, data);
       11'h082: data = 8'b01001000;
       11'h083: data = 8'b01001000;
       11'h084: data = 8'b01000100;
-      11'h085: data = 8'b00100100;
+      11'h085: data = 8'b00100100; // B
       11'h086: data = 8'b00011010;
       11'h087: data = 8'b00000000;
       11'h088: data = 8'b00000000;
@@ -550,7 +897,7 @@ module chrrom(addr, data);
       11'h096: data = 8'b00000000;
       11'h097: data = 8'b00000000;
       11'h098: data = 8'b00000000;
-      11'h099: data = 8'b00000000;
+      11'h099: data = 8'b00000000; // B
       11'h09A: data = 8'b00000000;
       11'h09B: data = 8'b00000000;
       11'h09C: data = 8'b00000000;
@@ -571,7 +918,7 @@ module chrrom(addr, data);
       11'h0AA: data = 8'b00100000;
       11'h0AB: data = 8'b00010000;
       11'h0AC: data = 8'b00001000;
-      11'h0AD: data = 8'b00000100;
+      11'h0AD: data = 8'b00000100; // B
       11'h0AE: data = 8'b00000010;
       11'h0AF: data = 8'b00000000;
       11'h0B0: data = 8'b00000000;
@@ -592,7 +939,7 @@ module chrrom(addr, data);
       11'h0BE: data = 8'b00000100;
       11'h0BF: data = 8'b00001000;
       11'h0C0: data = 8'b00010000;
-      11'h0C1: data = 8'b00100000;
+      11'h0C1: data = 8'b00100000; // B
       11'h0C2: data = 8'b01000000;
       11'h0C3: data = 8'b00000000;
       11'h0C4: data = 8'b00000000;
@@ -613,7 +960,7 @@ module chrrom(addr, data);
       11'h0D2: data = 8'b00011000;
       11'h0D3: data = 8'b00100100;
       11'h0D4: data = 8'b00100100;
-      11'h0D5: data = 8'b01000010;
+      11'h0D5: data = 8'b01000010; // B
       11'h0D6: data = 8'b01000010;
       11'h0D7: data = 8'b00000000;
       11'h0D8: data = 8'b00000000;
@@ -634,7 +981,7 @@ module chrrom(addr, data);
       11'h0E6: data = 8'b00010000;
       11'h0E7: data = 8'b00010000;
       11'h0E8: data = 8'b00000000;
-      11'h0E9: data = 8'b00000000;
+      11'h0E9: data = 8'b00000000; // B
       11'h0EA: data = 8'b00000000;
       11'h0EB: data = 8'b00000000;
       11'h0EC: data = 8'b00000000;
@@ -655,7 +1002,7 @@ module chrrom(addr, data);
       11'h0FA: data = 8'b00000000;
       11'h0FB: data = 8'b00000000;
       11'h0FC: data = 8'b00000000;
-      11'h0FD: data = 8'b00000000;
+      11'h0FD: data = 8'b00000000; // B
       11'h0FE: data = 8'b00010000;
       11'h0FF: data = 8'b00010000;
       11'h100: data = 8'b00100000;
@@ -676,7 +1023,7 @@ module chrrom(addr, data);
       11'h10E: data = 8'b00000000;
       11'h10F: data = 8'b00000000;
       11'h110: data = 8'b00000000;
-      11'h111: data = 8'b00000000;
+      11'h111: data = 8'b00000000; // B
       11'h112: data = 8'b00000000;
       11'h113: data = 8'b00000000;
       11'h114: data = 8'b00000000;
@@ -697,7 +1044,7 @@ module chrrom(addr, data);
       11'h122: data = 8'b00000000;
       11'h123: data = 8'b00000000;
       11'h124: data = 8'b00000000;
-      11'h125: data = 8'b00000000;
+      11'h125: data = 8'b00000000; // B
       11'h126: data = 8'b00010000;
       11'h127: data = 8'b00000000;
       11'h128: data = 8'b00000000;
@@ -718,7 +1065,7 @@ module chrrom(addr, data);
       11'h136: data = 8'b00010000;
       11'h137: data = 8'b00100000;
       11'h138: data = 8'b00100000;
-      11'h139: data = 8'b01000000;
+      11'h139: data = 8'b01000000; // B
       11'h13A: data = 8'b01000000;
       11'h13B: data = 8'b00000000;
       11'h13C: data = 8'b00000000;
@@ -739,7 +1086,7 @@ module chrrom(addr, data);
       11'h14A: data = 8'b01100010;
       11'h14B: data = 8'b01100010;
       11'h14C: data = 8'b01000010;
-      11'h14D: data = 8'b01000010;
+      11'h14D: data = 8'b01000010; // B
       11'h14E: data = 8'b00111100;
       11'h14F: data = 8'b00000000;
       11'h150: data = 8'b00000000;
@@ -760,7 +1107,7 @@ module chrrom(addr, data);
       11'h15E: data = 8'b00001000;
       11'h15F: data = 8'b00001000;
       11'h160: data = 8'b00001000;
-      11'h161: data = 8'b00001000;
+      11'h161: data = 8'b00001000; // B
       11'h162: data = 8'b01111110;
       11'h163: data = 8'b00000000;
       11'h164: data = 8'b00000000;
@@ -781,7 +1128,7 @@ module chrrom(addr, data);
       11'h172: data = 8'b00010000;
       11'h173: data = 8'b00010000;
       11'h174: data = 8'b00100000;
-      11'h175: data = 8'b01000000;
+      11'h175: data = 8'b01000000; // B
       11'h176: data = 8'b01111110;
       11'h177: data = 8'b00000000;
       11'h178: data = 8'b00000000;
@@ -802,7 +1149,7 @@ module chrrom(addr, data);
       11'h186: data = 8'b00000010;
       11'h187: data = 8'b00000010;
       11'h188: data = 8'b00000010;
-      11'h189: data = 8'b01000010;
+      11'h189: data = 8'b01000010; // B
       11'h18A: data = 8'b00111100;
       11'h18B: data = 8'b00000000;
       11'h18C: data = 8'b00000000;
@@ -823,7 +1170,7 @@ module chrrom(addr, data);
       11'h19A: data = 8'b00000010;
       11'h19B: data = 8'b00000010;
       11'h19C: data = 8'b00000010;
-      11'h19D: data = 8'b00000010;
+      11'h19D: data = 8'b00000010; // B
       11'h19E: data = 8'b00000010;
       11'h19F: data = 8'b00000000;
       11'h1A0: data = 8'b00000000;
@@ -844,7 +1191,7 @@ module chrrom(addr, data);
       11'h1AE: data = 8'b00000010;
       11'h1AF: data = 8'b00000010;
       11'h1B0: data = 8'b00000010;
-      11'h1B1: data = 8'b00000010;
+      11'h1B1: data = 8'b00000010; // B
       11'h1B2: data = 8'b01111100;
       11'h1B3: data = 8'b00000000;
       11'h1B4: data = 8'b00000000;
@@ -865,7 +1212,7 @@ module chrrom(addr, data);
       11'h1C2: data = 8'b01000010;
       11'h1C3: data = 8'b01000010;
       11'h1C4: data = 8'b01000010;
-      11'h1C5: data = 8'b01000010;
+      11'h1C5: data = 8'b01000010; // B
       11'h1C6: data = 8'b00111100;
       11'h1C7: data = 8'b00000000;
       11'h1C8: data = 8'b00000000;
@@ -886,7 +1233,7 @@ module chrrom(addr, data);
       11'h1D6: data = 8'b01000000;
       11'h1D7: data = 8'b01000000;
       11'h1D8: data = 8'b01000000;
-      11'h1D9: data = 8'b01000000;
+      11'h1D9: data = 8'b01000000; // B
       11'h1DA: data = 8'b01000000;
       11'h1DB: data = 8'b00000000;
       11'h1DC: data = 8'b00000000;
@@ -907,7 +1254,7 @@ module chrrom(addr, data);
       11'h1EA: data = 8'b01000010;
       11'h1EB: data = 8'b01000010;
       11'h1EC: data = 8'b01000010;
-      11'h1ED: data = 8'b01000010;
+      11'h1ED: data = 8'b01000010; // B
       11'h1EE: data = 8'b01111100;
       11'h1EF: data = 8'b00000000;
       11'h1F0: data = 8'b00000000;
@@ -928,7 +1275,7 @@ module chrrom(addr, data);
       11'h1FE: data = 8'b00000100;
       11'h1FF: data = 8'b00001000;
       11'h200: data = 8'b00010000;
-      11'h201: data = 8'b00100000;
+      11'h201: data = 8'b00100000; // B
       11'h202: data = 8'b01000000;
       11'h203: data = 8'b00000000;
       11'h204: data = 8'b00000000;
@@ -949,7 +1296,7 @@ module chrrom(addr, data);
       11'h212: data = 8'b00000000;
       11'h213: data = 8'b00000000;
       11'h214: data = 8'b00010000;
-      11'h215: data = 8'b00000000;
+      11'h215: data = 8'b00000000; // B
       11'h216: data = 8'b00010000;
       11'h217: data = 8'b00000000;
       11'h218: data = 8'b00000000;
@@ -970,7 +1317,7 @@ module chrrom(addr, data);
       11'h226: data = 8'b00000000;
       11'h227: data = 8'b00000000;
       11'h228: data = 8'b00010000;
-      11'h229: data = 8'b00000000;
+      11'h229: data = 8'b00000000; // B
       11'h22A: data = 8'b00010000;
       11'h22B: data = 8'b00010000;
       11'h22C: data = 8'b00100000;
@@ -991,7 +1338,7 @@ module chrrom(addr, data);
       11'h23A: data = 8'b00010000;
       11'h23B: data = 8'b00001000;
       11'h23C: data = 8'b00000100;
-      11'h23D: data = 8'b00000010;
+      11'h23D: data = 8'b00000010; // B
       11'h23E: data = 8'b00000000;
       11'h23F: data = 8'b00000000;
       11'h240: data = 8'b00000000;
@@ -1012,7 +1359,7 @@ module chrrom(addr, data);
       11'h24E: data = 8'b00000000;
       11'h24F: data = 8'b00000000;
       11'h250: data = 8'b00000000;
-      11'h251: data = 8'b00000000;
+      11'h251: data = 8'b00000000; // B
       11'h252: data = 8'b00000000;
       11'h253: data = 8'b00000000;
       11'h254: data = 8'b00000000;
@@ -1033,7 +1380,7 @@ module chrrom(addr, data);
       11'h262: data = 8'b00001000;
       11'h263: data = 8'b00010000;
       11'h264: data = 8'b00100000;
-      11'h265: data = 8'b01000000;
+      11'h265: data = 8'b01000000; // B
       11'h266: data = 8'b00000000;
       11'h267: data = 8'b00000000;
       11'h268: data = 8'b00000000;
@@ -1054,7 +1401,7 @@ module chrrom(addr, data);
       11'h276: data = 8'b00010000;
       11'h277: data = 8'b00010000;
       11'h278: data = 8'b00010000;
-      11'h279: data = 8'b00000000;
+      11'h279: data = 8'b00000000; // B
       11'h27A: data = 8'b00010000;
       11'h27B: data = 8'b00000000;
       11'h27C: data = 8'b00000000;
@@ -1075,7 +1422,7 @@ module chrrom(addr, data);
       11'h28A: data = 8'b01000000;
       11'h28B: data = 8'b01000000;
       11'h28C: data = 8'b01000000;
-      11'h28D: data = 8'b01000000;
+      11'h28D: data = 8'b01000000; // B
       11'h28E: data = 8'b01111110;
       11'h28F: data = 8'b00000000;
       11'h290: data = 8'b00000000;
@@ -1096,7 +1443,7 @@ module chrrom(addr, data);
       11'h29E: data = 8'b01000010;
       11'h29F: data = 8'b01000010;
       11'h2A0: data = 8'b01000010;
-      11'h2A1: data = 8'b01000010;
+      11'h2A1: data = 8'b01000010; // B
       11'h2A2: data = 8'b01000010;
       11'h2A3: data = 8'b00000000;
       11'h2A4: data = 8'b00000000;
@@ -1117,7 +1464,7 @@ module chrrom(addr, data);
       11'h2B2: data = 8'b01000010;
       11'h2B3: data = 8'b01000010;
       11'h2B4: data = 8'b01000010;
-      11'h2B5: data = 8'b01000010;
+      11'h2B5: data = 8'b01000010; // B
       11'h2B6: data = 8'b01111100;
       11'h2B7: data = 8'b00000000;
       11'h2B8: data = 8'b00000000;
@@ -1138,7 +1485,7 @@ module chrrom(addr, data);
       11'h2C6: data = 8'b01000000;
       11'h2C7: data = 8'b01000000;
       11'h2C8: data = 8'b01000000;
-      11'h2C9: data = 8'b01000010;
+      11'h2C9: data = 8'b01000010; // B
       11'h2CA: data = 8'b00111100;
       11'h2CB: data = 8'b00000000;
       11'h2CC: data = 8'b00000000;
@@ -1159,7 +1506,7 @@ module chrrom(addr, data);
       11'h2DA: data = 8'b01000010;
       11'h2DB: data = 8'b01000010;
       11'h2DC: data = 8'b01000010;
-      11'h2DD: data = 8'b01000010;
+      11'h2DD: data = 8'b01000010; // B
       11'h2DE: data = 8'b01111100;
       11'h2DF: data = 8'b00000000;
       11'h2E0: data = 8'b00000000;
@@ -1180,7 +1527,7 @@ module chrrom(addr, data);
       11'h2EE: data = 8'b01000000;
       11'h2EF: data = 8'b01000000;
       11'h2F0: data = 8'b01000000;
-      11'h2F1: data = 8'b01000000;
+      11'h2F1: data = 8'b01000000; // B
       11'h2F2: data = 8'b01111110;
       11'h2F3: data = 8'b00000000;
       11'h2F4: data = 8'b00000000;
@@ -1201,7 +1548,7 @@ module chrrom(addr, data);
       11'h302: data = 8'b01000000;
       11'h303: data = 8'b01000000;
       11'h304: data = 8'b01000000;
-      11'h305: data = 8'b01000000;
+      11'h305: data = 8'b01000000; // B
       11'h306: data = 8'b01000000;
       11'h307: data = 8'b00000000;
       11'h308: data = 8'b00000000;
@@ -1222,7 +1569,7 @@ module chrrom(addr, data);
       11'h316: data = 8'b01000010;
       11'h317: data = 8'b01000010;
       11'h318: data = 8'b01000010;
-      11'h319: data = 8'b01000010;
+      11'h319: data = 8'b01000010; // B
       11'h31A: data = 8'b00111100;
       11'h31B: data = 8'b00000000;
       11'h31C: data = 8'b00000000;
@@ -1243,7 +1590,7 @@ module chrrom(addr, data);
       11'h32A: data = 8'b01000010;
       11'h32B: data = 8'b01000010;
       11'h32C: data = 8'b01000010;
-      11'h32D: data = 8'b01000010;
+      11'h32D: data = 8'b01000010; // B
       11'h32E: data = 8'b01000010;
       11'h32F: data = 8'b00000000;
       11'h330: data = 8'b00000000;
@@ -1264,7 +1611,7 @@ module chrrom(addr, data);
       11'h33E: data = 8'b00010000;
       11'h33F: data = 8'b00010000;
       11'h340: data = 8'b00010000;
-      11'h341: data = 8'b00010000;
+      11'h341: data = 8'b00010000; // B
       11'h342: data = 8'b01111110;
       11'h343: data = 8'b00000000;
       11'h344: data = 8'b00000000;
@@ -1285,7 +1632,7 @@ module chrrom(addr, data);
       11'h352: data = 8'b00000010;
       11'h353: data = 8'b00000010;
       11'h354: data = 8'b00000010;
-      11'h355: data = 8'b01000010;
+      11'h355: data = 8'b01000010; // B
       11'h356: data = 8'b00111100;
       11'h357: data = 8'b00000000;
       11'h358: data = 8'b00000000;
@@ -1306,7 +1653,7 @@ module chrrom(addr, data);
       11'h366: data = 8'b01001000;
       11'h367: data = 8'b01000100;
       11'h368: data = 8'b01000010;
-      11'h369: data = 8'b01000010;
+      11'h369: data = 8'b01000010; // B
       11'h36A: data = 8'b01000010;
       11'h36B: data = 8'b00000000;
       11'h36C: data = 8'b00000000;
@@ -1327,7 +1674,7 @@ module chrrom(addr, data);
       11'h37A: data = 8'b01000000;
       11'h37B: data = 8'b01000000;
       11'h37C: data = 8'b01000000;
-      11'h37D: data = 8'b01000000;
+      11'h37D: data = 8'b01000000; // B
       11'h37E: data = 8'b01111110;
       11'h37F: data = 8'b00000000;
       11'h380: data = 8'b00000000;
@@ -1348,7 +1695,7 @@ module chrrom(addr, data);
       11'h38E: data = 8'b01000010;
       11'h38F: data = 8'b01000010;
       11'h390: data = 8'b01000010;
-      11'h391: data = 8'b01000010;
+      11'h391: data = 8'b01000010; // B
       11'h392: data = 8'b01000010;
       11'h393: data = 8'b00000000;
       11'h394: data = 8'b00000000;
@@ -1369,7 +1716,7 @@ module chrrom(addr, data);
       11'h3A2: data = 8'b01000010;
       11'h3A3: data = 8'b01000010;
       11'h3A4: data = 8'b01000010;
-      11'h3A5: data = 8'b01000010;
+      11'h3A5: data = 8'b01000010; // B
       11'h3A6: data = 8'b01000010;
       11'h3A7: data = 8'b00000000;
       11'h3A8: data = 8'b00000000;
@@ -1390,7 +1737,7 @@ module chrrom(addr, data);
       11'h3B6: data = 8'b01000010;
       11'h3B7: data = 8'b01000010;
       11'h3B8: data = 8'b01000010;
-      11'h3B9: data = 8'b01000010;
+      11'h3B9: data = 8'b01000010; // B
       11'h3BA: data = 8'b00111100;
       11'h3BB: data = 8'b00000000;
       11'h3BC: data = 8'b00000000;
@@ -1411,7 +1758,7 @@ module chrrom(addr, data);
       11'h3CA: data = 8'b01000000;
       11'h3CB: data = 8'b01000000;
       11'h3CC: data = 8'b01000000;
-      11'h3CD: data = 8'b01000000;
+      11'h3CD: data = 8'b01000000; // B
       11'h3CE: data = 8'b01000000;
       11'h3CF: data = 8'b00000000;
       11'h3D0: data = 8'b00000000;
@@ -1432,7 +1779,7 @@ module chrrom(addr, data);
       11'h3DE: data = 8'b01000010;
       11'h3DF: data = 8'b01000010;
       11'h3E0: data = 8'b01001010;
-      11'h3E1: data = 8'b01000110;
+      11'h3E1: data = 8'b01000110; // B
       11'h3E2: data = 8'b00011110;
       11'h3E3: data = 8'b00000000;
       11'h3E4: data = 8'b00000000;
@@ -1453,7 +1800,7 @@ module chrrom(addr, data);
       11'h3F2: data = 8'b01010000;
       11'h3F3: data = 8'b01001000;
       11'h3F4: data = 8'b01000100;
-      11'h3F5: data = 8'b01000100;
+      11'h3F5: data = 8'b01000100; // B
       11'h3F6: data = 8'b01000010;
       11'h3F7: data = 8'b00000000;
       11'h3F8: data = 8'b00000000;
@@ -1474,7 +1821,7 @@ module chrrom(addr, data);
       11'h406: data = 8'b00000010;
       11'h407: data = 8'b00000010;
       11'h408: data = 8'b00000010;
-      11'h409: data = 8'b01000010;
+      11'h409: data = 8'b01000010; // B
       11'h40A: data = 8'b00111100;
       11'h40B: data = 8'b00000000;
       11'h40C: data = 8'b00000000;
@@ -1495,7 +1842,7 @@ module chrrom(addr, data);
       11'h41A: data = 8'b00010000;
       11'h41B: data = 8'b00010000;
       11'h41C: data = 8'b00010000;
-      11'h41D: data = 8'b00010000;
+      11'h41D: data = 8'b00010000; // B
       11'h41E: data = 8'b00010000;
       11'h41F: data = 8'b00000000;
       11'h420: data = 8'b00000000;
@@ -1516,7 +1863,7 @@ module chrrom(addr, data);
       11'h42E: data = 8'b01000010;
       11'h42F: data = 8'b01000010;
       11'h430: data = 8'b01000010;
-      11'h431: data = 8'b01000010;
+      11'h431: data = 8'b01000010; // B
       11'h432: data = 8'b00111100;
       11'h433: data = 8'b00000000;
       11'h434: data = 8'b00000000;
@@ -1537,7 +1884,7 @@ module chrrom(addr, data);
       11'h442: data = 8'b01000010;
       11'h443: data = 8'b01000010;
       11'h444: data = 8'b01000100;
-      11'h445: data = 8'b00101000;
+      11'h445: data = 8'b00101000; // B
       11'h446: data = 8'b00010000;
       11'h447: data = 8'b00000000;
       11'h448: data = 8'b00000000;
@@ -1558,7 +1905,7 @@ module chrrom(addr, data);
       11'h456: data = 8'b01000010;
       11'h457: data = 8'b01000010;
       11'h458: data = 8'b01010010;
-      11'h459: data = 8'b01101010;
+      11'h459: data = 8'b01101010; // B
       11'h45A: data = 8'b01000110;
       11'h45B: data = 8'b00000000;
       11'h45C: data = 8'b00000000;
@@ -2384,6 +2731,344 @@ module chrrom(addr, data);
       11'h769: data = 8'b00000000;
       11'h76A: data = 8'b00000000;
       11'h76B: data = 8'b00000000;
+
+      default data = 8'b00000000; // blank
+   
+   endcase
+   
+endmodule
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// KEYBOARD SCAN CODE CONVERTER
+//
+// Converts an 8 bit scan code to ASCII characters. Note that we don't represent
+// any control or other special characters in this table. Controls, shifts and
+// other keys are created at a higher level.
+//
+// There are two tables, the lower case or "normal" lookup table, and a shifted
+// table that gives either the upper case for the key, or an alternate 
+// character.
+//
+// To determine the proper arrangement of scan codes to ascii codes, a keyboard
+// scan code table was used, which can be found various places on the internet.
+//
+
+module scnrom(addr, data);
+
+   input  [7:0] addr;
+   output [7:0] data;
+
+   reg [7:0]  data;
+
+   always @(addr) case (addr)
+
+      8'h00: data = 8'h00; // 
+      8'h01: data = 8'h00; // f9
+      8'h02: data = 8'h00; // 
+      8'h03: data = 8'h00; // f5
+      8'h04: data = 8'h00; // f3
+      8'h05: data = 8'h00; // f1
+      8'h06: data = 8'h00; // f2
+      8'h07: data = 8'h00; // f12
+      8'h08: data = 8'h00; // 
+      8'h09: data = 8'h00; // f10
+      8'h0A: data = 8'h00; // f8
+      8'h0B: data = 8'h00; // f6
+      8'h0C: data = 8'h00; // f4
+      8'h0D: data = 8'h09; // tab
+      8'h0E: data = 8'h60; // `
+      8'h0F: data = 8'h00; // 
+      8'h10: data = 8'h00; // 
+      8'h11: data = 8'h00; // lft alt
+      8'h12: data = 8'h00; // lft shift
+      8'h13: data = 8'h00; // 
+      8'h14: data = 8'h00; // left ctl
+      8'h15: data = 8'h71; // q
+      8'h16: data = 8'h31; // 1
+      8'h17: data = 8'h00; // 
+      8'h18: data = 8'h00; // 
+      8'h19: data = 8'h00; // 
+      8'h1A: data = 8'h7a; // z
+      8'h1B: data = 8'h73; // s
+      8'h1C: data = 8'h61; // a
+      8'h1D: data = 8'h77; // w
+      8'h1E: data = 8'h32; // 2
+      8'h1F: data = 8'h00; // 
+      8'h20: data = 8'h00; // 
+      8'h21: data = 8'h63; // c
+      8'h22: data = 8'h78; // x
+      8'h23: data = 8'h64; // d
+      8'h24: data = 8'h65; // e
+      8'h25: data = 8'h34; // 4
+      8'h26: data = 8'h33; // 3
+      8'h27: data = 8'h00; // 
+      8'h28: data = 8'h00; // 
+      8'h29: data = 8'h20; // sp
+      8'h2A: data = 8'h76; // v
+      8'h2B: data = 8'h66; // f
+      8'h2C: data = 8'h74; // t
+      8'h2D: data = 8'h72; // r
+      8'h2E: data = 8'h35; // 5
+      8'h2F: data = 8'h00; // 
+      8'h30: data = 8'h00; // 
+      8'h31: data = 8'h6e; // n
+      8'h32: data = 8'h62; // b
+      8'h33: data = 8'h68; // h
+      8'h34: data = 8'h67; // g
+      8'h35: data = 8'h79; // y
+      8'h36: data = 8'h36; // 6
+      8'h37: data = 8'h00; // 
+      8'h38: data = 8'h00; // 
+      8'h39: data = 8'h00; // 
+      8'h3A: data = 8'h6d; // m
+      8'h3B: data = 8'h6a; // j
+      8'h3C: data = 8'h75; // u
+      8'h3D: data = 8'h37; // 7
+      8'h3E: data = 8'h38; // 8
+      8'h3F: data = 8'h00; // 
+      8'h40: data = 8'h00; // 
+      8'h41: data = 8'h2c; // ,
+      8'h42: data = 8'h6b; // k
+      8'h43: data = 8'h69; // i
+      8'h44: data = 8'h6f; // o
+      8'h45: data = 8'h30; // 0
+      8'h46: data = 8'h39; // 9
+      8'h47: data = 8'h00; // 
+      8'h48: data = 8'h00; // 
+      8'h49: data = 8'h2e; // .
+      8'h4A: data = 8'h2f; // /
+      8'h4B: data = 8'h6c; // l
+      8'h4C: data = 8'h3b; // ;
+      8'h4D: data = 8'h70; // p
+      8'h4E: data = 8'h2d; // -
+      8'h4F: data = 8'h00; // 
+      8'h50: data = 8'h00; // 
+      8'h51: data = 8'h00; // 
+      8'h52: data = 8'h27; // '
+      8'h53: data = 8'h00; // 
+      8'h54: data = 8'h5b; // [
+      8'h55: data = 8'h3d; // =
+      8'h56: data = 8'h00; // 
+      8'h57: data = 8'h00; // 
+      8'h58: data = 8'h00; // caps lock
+      8'h59: data = 8'h00; // rgt shift
+      8'h5A: data = 8'h0D; // ent
+      8'h5B: data = 8'h5d; // ]
+      8'h5C: data = 8'h00; // 
+      8'h5D: data = 8'h5c; // \
+      8'h5E: data = 8'h00; // 
+      8'h5F: data = 8'h00; // 
+      8'h60: data = 8'h00; // 
+      8'h61: data = 8'h00; // 
+      8'h62: data = 8'h00; // 
+      8'h63: data = 8'h00; // 
+      8'h64: data = 8'h00; // 
+      8'h65: data = 8'h00; // 
+      8'h66: data = 8'h08; // bcksp
+      8'h67: data = 8'h00; // 
+      8'h68: data = 8'h00; // 
+      8'h69: data = 8'h31; // 1
+      8'h6A: data = 8'h00; // 
+      8'h6B: data = 8'h34; // 4
+      8'h6C: data = 8'h37; // 7
+      8'h6D: data = 8'h00; // 
+      8'h6E: data = 8'h00; // 
+      8'h6F: data = 8'h00; // 
+      8'h70: data = 8'h30; // 0
+      8'h71: data = 8'h2e; // .
+      8'h72: data = 8'h32; // 2
+      8'h73: data = 8'h35; // 5
+      8'h74: data = 8'h36; // 6
+      8'h75: data = 8'h38; // 8
+      8'h76: data = 8'h1B; // esc
+      8'h77: data = 8'h00; // num lock
+      8'h78: data = 8'h00; // f11
+      8'h79: data = 8'h2b; // +
+      8'h7A: data = 8'h33; // 3
+      8'h7B: data = 8'h2d; // -
+      8'h7C: data = 8'h2a; // -
+      8'h7D: data = 8'h39; // 9
+      8'h7E: data = 8'h00; // scl lock
+      8'h7F: data = 8'h00; // 
+      8'h80: data = 8'h00; // 
+      8'h81: data = 8'h00; // 
+      8'h82: data = 8'h00; // 
+      8'h83: data = 8'h00; // f7
+      8'h84: data = 8'h00; // 
+      8'h85: data = 8'h00; // 
+      8'h86: data = 8'h00; // 
+      8'h87: data = 8'h00; // 
+      8'h88: data = 8'h00; // 
+      8'h89: data = 8'h00; // 
+      8'h8A: data = 8'h00; // 
+      8'h8B: data = 8'h00; // 
+      8'h8C: data = 8'h00; // 
+      8'h8D: data = 8'h00; // 
+      8'h8E: data = 8'h00; // 
+      8'h8F: data = 8'h00; // 
+
+      default data = 8'b00000000; // blank
+   
+   endcase
+   
+endmodule
+
+// upper case version
+
+module scnromu(addr, data);
+
+   input  [7:0] addr;
+   output [7:0] data;
+
+   reg [7:0]  data;
+
+   always @(addr) case (addr)
+
+      8'h00: data = 8'h00; // 
+      8'h01: data = 8'h00; // f9
+      8'h02: data = 8'h00; // 
+      8'h03: data = 8'h00; // f5
+      8'h04: data = 8'h00; // f3
+      8'h05: data = 8'h00; // f1
+      8'h06: data = 8'h00; // f2
+      8'h07: data = 8'h00; // f12
+      8'h08: data = 8'h00; // 
+      8'h09: data = 8'h00; // f10
+      8'h0A: data = 8'h00; // f8
+      8'h0B: data = 8'h00; // f6
+      8'h0C: data = 8'h00; // f4
+      8'h0D: data = 8'h09; // tab
+      8'h0E: data = 8'h7e; // ~
+      8'h0F: data = 8'h00; // 
+      8'h10: data = 8'h00; // 
+      8'h11: data = 8'h00; // lft alt
+      8'h12: data = 8'h00; // lft shift
+      8'h13: data = 8'h00; // 
+      8'h14: data = 8'h00; // lft ctl
+      8'h15: data = 8'h51; // Q
+      8'h16: data = 8'h21; // !
+      8'h17: data = 8'h00; // 
+      8'h18: data = 8'h00; // 
+      8'h19: data = 8'h00; // 
+      8'h1A: data = 8'h5a; // Z
+      8'h1B: data = 8'h53; // S
+      8'h1C: data = 8'h41; // A
+      8'h1D: data = 8'h57; // W
+      8'h1E: data = 8'h40; // @
+      8'h1F: data = 8'h00; // 
+      8'h20: data = 8'h00; // 
+      8'h21: data = 8'h43; // C
+      8'h22: data = 8'h58; // X
+      8'h23: data = 8'h44; // D
+      8'h24: data = 8'h45; // E
+      8'h25: data = 8'h24; // $
+      8'h26: data = 8'h23; // #
+      8'h27: data = 8'h00; // 
+      8'h28: data = 8'h00; // 
+      8'h29: data = 8'h20; // sp
+      8'h2A: data = 8'h56; // V
+      8'h2B: data = 8'h46; // F
+      8'h2C: data = 8'h54; // T
+      8'h2D: data = 8'h52; // R
+      8'h2E: data = 8'h25; // %
+      8'h2F: data = 8'h00; // 
+      8'h30: data = 8'h00; // 
+      8'h31: data = 8'h4e; // N
+      8'h32: data = 8'h42; // B
+      8'h33: data = 8'h48; // H
+      8'h34: data = 8'h47; // G
+      8'h35: data = 8'h59; // Y
+      8'h36: data = 8'h5e; // ^
+      8'h37: data = 8'h00; // 
+      8'h38: data = 8'h00; // 
+      8'h39: data = 8'h00; // 
+      8'h3A: data = 8'h4d; // M
+      8'h3B: data = 8'h4a; // J
+      8'h3C: data = 8'h55; // U
+      8'h3D: data = 8'h26; // &
+      8'h3E: data = 8'h2a; // *
+      8'h3F: data = 8'h00; // 
+      8'h40: data = 8'h00; // 
+      8'h41: data = 8'h3c; // <
+      8'h42: data = 8'h4b; // K
+      8'h43: data = 8'h49; // I
+      8'h44: data = 8'h4f; // O
+      8'h45: data = 8'h29; // )
+      8'h46: data = 8'h28; // (
+      8'h47: data = 8'h00; // 
+      8'h48: data = 8'h00; // 
+      8'h49: data = 8'h3e; // >
+      8'h4A: data = 8'h3f; // ?
+      8'h4B: data = 8'h4c; // L
+      8'h4C: data = 8'h3a; // :
+      8'h4D: data = 8'h50; // P
+      8'h4E: data = 8'h5f; // _
+      8'h4F: data = 8'h00; // 
+      8'h50: data = 8'h00; // 
+      8'h51: data = 8'h00; // 
+      8'h52: data = 8'h22; // "
+      8'h53: data = 8'h00; // 
+      8'h54: data = 8'h7b; // {
+      8'h55: data = 8'h2b; // +
+      8'h56: data = 8'h00; // 
+      8'h57: data = 8'h00; // 
+      8'h58: data = 8'h00; // caps lock
+      8'h59: data = 8'h00; // rgt shift
+      8'h5A: data = 8'h0D; // ent
+      8'h5B: data = 8'h7d; // }
+      8'h5C: data = 8'h00; // 
+      8'h5D: data = 8'h7c; // |
+      8'h5E: data = 8'h00; // 
+      8'h5F: data = 8'h00; // 
+      8'h60: data = 8'h00; // 
+      8'h61: data = 8'h00; // 
+      8'h62: data = 8'h00; // 
+      8'h63: data = 8'h00; // 
+      8'h64: data = 8'h00; // 
+      8'h65: data = 8'h00; // 
+      8'h66: data = 8'h08; // bcksp
+      8'h67: data = 8'h00; // 
+      8'h68: data = 8'h00; // 
+      8'h69: data = 8'h31; // 1
+      8'h6A: data = 8'h00; // 
+      8'h6B: data = 8'h34; // 4
+      8'h6C: data = 8'h37; // 7
+      8'h6D: data = 8'h00; // 
+      8'h6E: data = 8'h00; // 
+      8'h6F: data = 8'h00; // 
+      8'h70: data = 8'h30; // 0
+      8'h71: data = 8'h2e; // .
+      8'h72: data = 8'h32; // 2
+      8'h73: data = 8'h35; // 5
+      8'h74: data = 8'h36; // 6
+      8'h75: data = 8'h38; // 8
+      8'h76: data = 8'h1B; // esc
+      8'h77: data = 8'h00; // num lock
+      8'h78: data = 8'h00; // f11
+      8'h79: data = 8'h2b; // +
+      8'h7A: data = 8'h33; // 3
+      8'h7B: data = 8'h2d; // -
+      8'h7C: data = 8'h2a; // *
+      8'h7D: data = 8'h39; // 9
+      8'h7E: data = 8'h00; // scl lock
+      8'h7F: data = 8'h00; // 
+      8'h80: data = 8'h00; // 
+      8'h81: data = 8'h00; // 
+      8'h82: data = 8'h00; // 
+      8'h83: data = 8'h00; // f7
+      8'h84: data = 8'h00; // 
+      8'h85: data = 8'h00; // 
+      8'h86: data = 8'h00; // 
+      8'h87: data = 8'h00; // 
+      8'h88: data = 8'h00; // 
+      8'h89: data = 8'h00; // 
+      8'h8A: data = 8'h00; // 
+      8'h8B: data = 8'h00; // 
+      8'h8C: data = 8'h00; // 
+      8'h8D: data = 8'h00; // 
+      8'h8E: data = 8'h00; // 
+      8'h8F: data = 8'h00; // 
 
       default data = 8'b00000000; // blank
    

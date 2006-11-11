@@ -12,7 +12,7 @@ C:\Xilinx.
 Loading constraints from 'testbench.pcf'...
 The speed grade (-4) differs from the speed grade specified in the .ncd file
 (-4).
-The number of routable networks is 4684
+The number of routable networks is 5271
 Flattening design ...
 Processing design ... 
   Preping design's networks ...
@@ -25,4 +25,4 @@ INFO:NetListWriters:633 - The generated Verilog netlist contains Xilinx SIMPRIM
    correct compilation and simulation. 
 Number of warnings: 0
 Number of info messages: 1
-Total memory usage is 208020 kilobytes
+Total memory usage is 217748 kilobytes

@@ -31,8 +31,11 @@ module testbench(addr,     // Address out
                  r, g, b,  // vga colors
                  hsync_n,  // vga horizontal sync negative
                  vsync_n,  // vga vertical sync negative
+                 ps2_clk,  // keyboard clock
+                 ps2_data, // keyboard data
                  reset_n,  // Reset
-                 clock);   // System clock
+                 clock,    // System clock
+                 diag);    // diagnostic port
 
    output [15:0] addr;
    inout  [7:0] data;
@@ -42,23 +45,15 @@ module testbench(addr,     // Address out
    output writeio;
    output intr;
    output inta;
-   input  waitr;
+   output waitr;
    output [2:0] r, g, b; // R,G,B color output buses
-   output       hsync_n; // horizontal sync pulse
-   output       vsync_n; // vertical sync pulse
+   output hsync_n; // horizontal sync pulse
+   output vsync_n; // vertical sync pulse
+   input  ps2_clk;  // clock from keyboard
+   input  ps2_data; // data from keyboard
    input  reset_n;
    input  clock;
-
-   reg [7:0] clkdiv;
-   wire clocki;
-   wire reset;
-
-   initial clkdiv = 0;
-
-   // divide down the clock so we can debug
-   always @(posedge clock) clkdiv <= clkdiv+1; // count
-   assign clocki = clkdiv[3]; // pick off top bit as internal clock
-//   assign clocki = clock;
+   output [7:0] diag; // diagnostic 8 bit port
 
    //
    // Instantiations
@@ -66,44 +61,39 @@ module testbench(addr,     // Address out
 
    // selector block, we only use select 1, 2 and 3
    select select1(addr, data, readio, writeio, romsel, ramsel, intsel, 
-                  trmsel, bootstrap, clocki, reset);
+                  trmsel, bootstrap, clock, reset);
 
    // 8080 CPU
    cpu8080 cpu(addr, data, readmem, writemem, readio, writeio, intr, inta, waitr,
-               reset, clocki);
-// assign readmem = 0;
-// assign writemem = 0;
-// assign readio = 0;
-// assign writeio = 0;
-// assign inta = 0;
-// assign addr = 0;
+               reset, clock);
 
    // Program rom
    rom rom(addr[9:0], data, romsel&readmem); // unclocked rom
 
    // neg clocked ram
-   ram ram(addr[9:0], data, ramsel, readmem, writemem, bootstrap, clocki);
+   ram ram(addr[9:0], data, ramsel, readmem, writemem, bootstrap, clock);
 
    // neg clocked interrupt controller
    intcontrol intc(addr[2:0], data, writeio, readio, intsel, intr, inta, int0, int1,
-                   int2, int3, int4, int5, int6, int7, reset, clocki);
+                   int2, int3, int4, int5, int6, int7, reset, clock);
 
    // ADM3A dumb terminal
    terminal adm3a(addr[0], data, writeio, readio, trmsel, r, g, b, hsync_n, vsync_n,
-                  reset, clock);
+                  ps2_clk, ps2_data, reset, clock, diag);
 
    // generate reset
    assign reset = !reset_n;
 
-   // pull up unused interrupt lines
-   assign int0 = 1;
-   assign int1 = 1;
-   assign int2 = 1;
-   assign int3 = 1;
-   assign int4 = 1;
-   assign int5 = 1;
-   assign int6 = 1;
-   assign int7 = 1;
+   // pull up or down unused lines
+   assign int0 = 0;
+   assign int1 = 0;
+   assign int2 = 0;
+   assign int3 = 0;
+   assign int4 = 0;
+   assign int5 = 0;
+   assign int6 = 0;
+   assign int7 = 0;
+   assign waitr = 0;
 
 endmodule
 
@@ -566,7 +556,7 @@ module rom(addr, data, dataeno);
    
    always @(addr) case (addr)
 
-      `include "test.lst" // get contents of memory
+      `include "test.rom" // get contents of memory
      
       default datao = 8'h76; // hlt
    
