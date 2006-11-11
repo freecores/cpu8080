@@ -36,6 +36,10 @@ inta
 clock
 intr
 clock
+ps2_clk
+clock
+ps2_data
+clock
 r
 clock
 readio
@@ -77,19 +81,21 @@ SIGNAL_ORDER_BEGIN
 clock
 reset_n
 waitr
-hsync_n
 inta
 intr
 readio
 readmem
-vsync_n
 writeio
 writemem
 addr
+data
 b
 g
 r
-data
+hsync_n
+vsync_n
+ps2_clk
+ps2_data
 SIGNAL_ORDER_END
 -X-X-X-
 

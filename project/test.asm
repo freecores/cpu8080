@@ -46,7 +46,7 @@ intvec: equ     intbas+$05      ! vector base page
 !
 siobas: equ     $20
 sioctl: equ     siobas+$00      ! control register
-siodat: equ     siobas+$01      ! status
+siodat: equ     siobas+$01      ! data
 
 !
 ! Set up selectors
@@ -93,9 +93,15 @@ loop:
         jmp     loop            ! loop next character
 endstr:
 !
-! halt
+! Copy characters from input to output
 !
-        hlt
+echo:
+        in      sioctl          ! check character waiting
+        ani     $20
+        jz      echo            ! no, wait
+        in      siodat          ! yes, get character
+        call    wrtout          ! output
+        jmp     echo            ! loop forever
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !

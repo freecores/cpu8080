@@ -34,7 +34,7 @@ public:
     void reset();
     virtual void archImplement();
     HSim__s1 us[17];
-    HSim__s3 uv[9];
+    HSim__s3 uv[10];
 };
 
 #endif

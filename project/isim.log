@@ -2,22 +2,22 @@
    ./cpu8080_tbw_isim_beh.exe
      -intstyle  ise
      -ipchost  localhost
-     -ipcport  1572
+     -ipcport  1963
 
-Tue Oct 31 23:18:27 2006
+Thu Nov 09 00:44:05 2006
 
-Total Line Count = 3778
+Total Line Count = 4336
 
- Elaboration time 0.03125 sec.
+ Elaboration time 0 sec.
 
- Estimate current memory usage 36.3848 Meg. 
+ Estimate current memory usage 36.4954 Meg. 
 
- Total signals 274
- Total nets 428
- Total signal drivers 132
- Total blocks 35
- Total primitive blocks 24
- Total processes 140
+ Total signals 320
+ Total nets 527
+ Total signal drivers 181
+ Total blocks 39
+ Total primitive blocks 28
+ Total processes 183
 ntrace select -o on -n /cpu8080_tbw/clock 
 ntrace select -o on -n /cpu8080_tbw/writemem 
 ntrace select -o on -n /cpu8080_tbw/readmem 
@@ -28,24 +28,10 @@ ntrace select -o on -n /cpu8080_tbw/addr
 ntrace select -o on -n /cpu8080_tbw/waitr 
 ntrace select -o on -n /cpu8080_tbw/intr 
 ntrace select -o on -n /cpu8080_tbw/inta 
-ntrace select -o on -n /cpu8080_tbw/vsync_n 
-ntrace select -o on -n /cpu8080_tbw/hsync_n 
-ntrace select -o on -n /cpu8080_tbw/b 
-ntrace select -o on -n /cpu8080_tbw/g 
-ntrace select -o on -n /cpu8080_tbw/r 
 ntrace select -o on -n /cpu8080_tbw/UUT/reset 
-ntrace select -o on -n /cpu8080_tbw/UUT/clocki 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmdata 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmwrite 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmaddr 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmdatai 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/cmdatae 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/state 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/outrdy 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/rd 
 ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/pixeldata 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/lincnt 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/rowcnt 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/chrcnt 
+ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/fchsta 
 ntrace start 
 run all 
 Simulator is doing circuit initialization process.

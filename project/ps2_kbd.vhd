@@ -33,7 +33,7 @@ use IEEE.numeric_std.all;
 package ps2_kbd_pckg is
   component ps2_kbd
     generic(
-      FREQ     :     natural := 100_000  -- frequency of the main clock (KHz)
+      FREQ     :     natural := 50_000  -- frequency of the main clock (KHz)
       );
     port(
       clk      : in  std_logic;         -- main clock
@@ -58,7 +58,7 @@ use IEEE.numeric_std.all;
 
 entity ps2_kbd is
   generic(
-    FREQ     :     natural := 100_000   -- frequency of the main clock (KHz)
+    FREQ     :     natural := 50_000   -- frequency of the main clock (KHz)
     );
   port(
     clk      : in  std_logic;           -- main clock
@@ -130,7 +130,9 @@ begin
               keyrel_r;
 
   -- the scancode for the pressed key arrives after receiving the key-release scancode 
-  rdy_x <= YES when keyrel_r = YES and scancode_rdy = YES else NO;
+  -- Changed: removed key release requirement, send all keys up.
+  -- rdy_x <= YES when keyrel_r = YES and scancode_rdy = YES else NO;
+  rdy_x <= YES when scancode_rdy = YES else NO;
 
   -- indicate an error if the clock is low for too long or if it stops pulsing in the middle of a scancode
   error_x <= YES when (timer_r = TIMEOUT and ps2_clk_r(2) = '0') or

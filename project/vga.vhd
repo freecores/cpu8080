@@ -8,6 +8,8 @@
 -- * for applications like a dot character generator, that can respond to      *
 -- * pixel row timing without delay.                                           *
 -- *                                                                           *
+-- * Simulation plugs exist in this code. Look for "????? SIMULATION PLUG"     *
+-- *                                                                           *
 -- *****************************************************************************
 
 library IEEE, unisim;
@@ -19,8 +21,8 @@ use work.common.all;
 package vga_pckg is
   component vga
     generic (
-      FREQ            :     natural := 100_000;  -- master clock frequency (in KHz)
-      CLK_DIV         :     natural := 4;  -- FREQ / CLK_DIV = pixel clock
+      FREQ            :     natural := 50_000;  -- master clock frequency (in KHz)
+      CLK_DIV         :     natural := 2;  -- FREQ / CLK_DIV = pixel clock
       PIXEL_WIDTH     :     natural := 1;  -- pixel width: 1, 2, 4, 8, or 16 bits
       PIXELS_PER_LINE :     natural := 640;  -- pixels per video scan line
       LINES_PER_FRAME :     natural := 480;  -- scan lines per video frame
@@ -49,8 +51,8 @@ use work.common.all;
 
 entity vga is
   generic (
-    FREQ            :     natural := 100_000;  -- master clock frequency (in KHz)
-    CLK_DIV         :     natural := 4;  -- FREQ / CLK_DIV = pixel clock
+    FREQ            :     natural := 50_000;  -- master clock frequency (in KHz)
+    CLK_DIV         :     natural := 2;  -- FREQ / CLK_DIV = pixel clock
     PIXEL_WIDTH     :     natural := 1;  -- pixel width: 1, 2, 4, 8, or 16 bits
     PIXELS_PER_LINE :     natural := 640;  -- pixels per video scan line
     LINES_PER_FRAME :     natural := 480;  -- scan lines per video frame
@@ -418,14 +420,20 @@ begin
   update : process(rst, clk)
   begin
     if rst = YES then
+-- ????? SIMULATION PLUG
 -- swap this next to place in non-blank cycle
-      cnt_r     <= (others => '0');
---      cnt_r     <= "0000000011111111";
+-- this allows data to appear in simulation, and only produces a momentary
+-- glitch in real hardware
+--      cnt_r     <= (others => '0');
+      cnt_r     <= "0000000011111111";
       sync_r    <= HI;
       gate_r    <= NO;
+-- ????? SIMULATION PLUG
 -- swap this next to place in non-blank cycle
-      blank_r   <= YES;
---      blank_r   <= NO;
+-- this allows data to appear in simulation, and only produces a momentary
+-- glitch in real hardware
+--      blank_r   <= YES;
+      blank_r   <= NO;
     elsif rising_edge(clk) then
       if cke = YES then
         cnt_r   <= cnt_x;
