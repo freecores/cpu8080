@@ -1,7 +1,7 @@
 Release 8.2.02i - xst I.33
 Copyright (c) 1995-2006 Xilinx, Inc.  All rights reserved.
 --> Parameter TMPDIR set to ./xst/projnav.tmp
-CPU : 0.00 / 0.23 s | Elapsed : 0.00 / 0.00 s
+CPU : 0.00 / 0.25 s | Elapsed : 0.00 / 0.00 s
  
 --> 
 =========================================================================
@@ -12,8 +12,11 @@ Architecture common of Entity common is up to date.
 Compiling vhdl file "C:/Xilinx/ISEexamples/cpu8080/ps2_kbd.vhd" in Library work.
 Architecture arch of Entity ps2_kbd is up to date.
 Compiling vhdl file "C:/Xilinx/ISEexamples/cpu8080/vga.vhd" in Library work.
-Architecture vga_arch of Entity vga is up to date.
-Architecture sync_arch of Entity sync is up to date.
+Package <vga_pckg> compiled.
+Entity <vga> compiled.
+Entity <vga> (Architecture <vga_arch>) compiled.
+Entity <sync> compiled.
+Entity <sync> (Architecture <sync_arch>) compiled.
 Compiling verilog file "vgachr.v" in library work
 Module <terminal> compiled
 Module <chrmemmap> compiled
@@ -34,7 +37,7 @@ Module <ram> compiled
 No errors in compilation
 Analysis of file <"testbench.prj"> succeeded.
  
-CPU : 0.75 / 0.98 s | Elapsed : 1.00 / 1.00 s
+CPU : 0.88 / 1.13 s | Elapsed : 1.00 / 1.00 s
  
 --> 
 
