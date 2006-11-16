@@ -1,7 +1,7 @@
 Release 8.2.02i par I.33
 Copyright (c) 1995-2006 Xilinx, Inc.  All rights reserved.
 
-SCOTT-H-PC::  Sat Nov 11 00:49:50 2006
+SCOTT-H-PC::  Wed Nov 15 08:50:34 2006
 
 par -w -intstyle ise -ol std -t 1 testbench_map.ncd testbench.ncd testbench.pcf
 
@@ -28,10 +28,10 @@ Device Utilization Summary:
    Number of External IOBs            54 out of 173    31%
       Number of LOCed IOBs            46 out of 54     85%
 
-   Number of MULT18X18s                1 out of 24      4%
-   Number of RAMB16s                   3 out of 24     12%
-   Number of Slices                 3312 out of 7680   43%
-      Number of SLICEMs              964 out of 3840   25%
+   Number of MULT18X18s                2 out of 24      8%
+   Number of RAMB16s                   4 out of 24     16%
+   Number of Slices                 3458 out of 7680   45%
+      Number of SLICEMs              958 out of 3840   24%
 
 
 
@@ -44,7 +44,7 @@ Router effort level (-rl):    Standard
 Starting Placer
 
 Phase 1.1
-Phase 1.1 (Checksum:996f21) REAL time: 11 secs 
+Phase 1.1 (Checksum:9984aa) REAL time: 9 secs 
 
 Phase 2.7
 WARNING:Place:837 - Partially locked IO Bus is found. 
@@ -60,69 +60,73 @@ WARNING:Place:837 - Partially locked IO Bus is found.
 
 INFO:Place:834 - Only a subset of IOs are locked. Out of 54 IOs, 46 are locked and 8 are not locked. If you would like
    to print the names of these IOs, please set the environment variable XIL_PAR_DESIGN_CHECK_VERBOSE to 2 (or more). 
-Phase 2.7 (Checksum:1312cfe) REAL time: 11 secs 
+Phase 2.7 (Checksum:1312cfe) REAL time: 10 secs 
 
 Phase 3.31
-Phase 3.31 (Checksum:1c9c37d) REAL time: 11 secs 
+Phase 3.31 (Checksum:1c9c37d) REAL time: 10 secs 
 
 Phase 4.2
 .....
 ...................
 
 
-Phase 4.2 (Checksum:98bdc7) REAL time: 22 secs 
+Phase 4.2 (Checksum:98bdc7) REAL time: 18 secs 
 
 Phase 5.3
-Phase 5.3 (Checksum:2faf07b) REAL time: 22 secs 
+Phase 5.3 (Checksum:2faf07b) REAL time: 18 secs 
 
 Phase 6.5
-Phase 6.5 (Checksum:39386fa) REAL time: 23 secs 
+Phase 6.5 (Checksum:39386fa) REAL time: 19 secs 
 
 Phase 7.8
-.......................................................................................................................................................................................................................................
-.........
-.............................................................................................
-..................
-............
-.....................................................................................................................................................................................................
-Phase 7.8 (Checksum:13e75c6) REAL time: 2 mins 56 secs 
+.....................................................
+.....................................
+...............................................................................................................................................................................
+.......
+.......
+.....
+Phase 7.8 (Checksum:1191c59) REAL time: 2 mins 2 secs 
 
 Phase 8.5
-Phase 8.5 (Checksum:4c4b3f8) REAL time: 2 mins 57 secs 
+Phase 8.5 (Checksum:4c4b3f8) REAL time: 2 mins 2 secs 
 
 Phase 9.18
-Phase 9.18 (Checksum:55d4a77) REAL time: 4 mins 9 secs 
+Phase 9.18 (Checksum:55d4a77) REAL time: 2 mins 53 secs 
 
 Phase 10.5
-Phase 10.5 (Checksum:5f5e0f6) REAL time: 4 mins 9 secs 
+Phase 10.5 (Checksum:5f5e0f6) REAL time: 2 mins 53 secs 
 
 Writing design to file testbench.ncd
 
 
-Total REAL time to Placer completion: 4 mins 14 secs 
-Total CPU time to Placer completion: 3 mins 33 secs 
+Total REAL time to Placer completion: 2 mins 57 secs 
+Total CPU time to Placer completion: 2 mins 51 secs 
 
 Starting Router
 
-Phase 1: 26804 unrouted;       REAL time: 4 mins 14 secs 
+Phase 1: 27686 unrouted;       REAL time: 2 mins 57 secs 
 
-Phase 2: 25251 unrouted;       REAL time: 4 mins 27 secs 
+Phase 2: 26061 unrouted;       REAL time: 3 mins 6 secs 
 
-Phase 3: 7585 unrouted;       REAL time: 4 mins 37 secs 
+Phase 3: 8086 unrouted;       REAL time: 3 mins 13 secs 
 
-Phase 4: 7585 unrouted; (20316)      REAL time: 4 mins 37 secs 
+Phase 4: 8086 unrouted; (44628)      REAL time: 3 mins 13 secs 
 
-Phase 5: 7586 unrouted; (0)      REAL time: 4 mins 40 secs 
+Phase 5: 8305 unrouted; (0)      REAL time: 3 mins 17 secs 
 
-Phase 6: 0 unrouted; (0)      REAL time: 5 mins 11 secs 
+Phase 6: 0 unrouted; (12079)      REAL time: 3 mins 42 secs 
 
-Phase 7: 0 unrouted; (0)      REAL time: 5 mins 15 secs 
+Phase 7: 0 unrouted; (12079)      REAL time: 3 mins 45 secs 
+
+Phase 8: 0 unrouted; (3768)      REAL time: 4 mins 
+
+Phase 9: 0 unrouted; (3768)      REAL time: 4 mins 2 secs 
 
 WARNING:Route:447 - CLK Net:reset_n_BUFGP may have excessive skew because 
-   442 NON-CLK pins failed to route using a CLK template.
+   463 NON-CLK pins failed to route using a CLK template.
 
-Total REAL time to Router completion: 5 mins 16 secs 
-Total CPU time to Router completion: 4 mins 25 secs 
+Total REAL time to Router completion: 4 mins 2 secs 
+Total CPU time to Router completion: 3 mins 57 secs 
 
 Partition Implementation Status
 -------------------------------
@@ -140,21 +144,21 @@ Generating Clock Report
 +---------------------+--------------+------+------+------------+-------------+
 |        Clock Net    |   Resource   |Locked|Fanout|Net Skew(ns)|Max Delay(ns)|
 +---------------------+--------------+------+------+------------+-------------+
-|         clock_BUFGP |      BUFGMUX3| No   | 1338 |  0.485     |  1.185      |
+|         clock_BUFGP |      BUFGMUX3| No   | 1384 |  0.436     |  1.139      |
 +---------------------+--------------+------+------+------------+-------------+
-|       reset_n_BUFGP |      BUFGMUX5| No   |  458 |  0.200     |  0.960      |
-+---------------------+--------------+------+------+------------+-------------+
-|select1/selectb/_and |              |      |      |            |             |
-|                0000 |         Local|      |    7 |  0.166     |  2.998      |
-+---------------------+--------------+------+------+------------+-------------+
-|select1/selecta/_and |              |      |      |            |             |
-|                0000 |         Local|      |    7 |  0.278     |  2.413      |
+|       reset_n_BUFGP |      BUFGMUX5| No   |  479 |  0.196     |  0.916      |
 +---------------------+--------------+------+------+------------+-------------+
 |select1/selectc/_and |              |      |      |            |             |
-|                0000 |         Local|      |    7 |  0.025     |  2.148      |
+|                0000 |         Local|      |    7 |  0.008     |  2.121      |
++---------------------+--------------+------+------+------------+-------------+
+|select1/selecta/_and |              |      |      |            |             |
+|                0000 |         Local|      |    7 |  0.038     |  2.244      |
 +---------------------+--------------+------+------+------------+-------------+
 |select1/selectd/_and |              |      |      |            |             |
-|                0000 |         Local|      |    7 |  0.135     |  2.994      |
+|                0000 |         Local|      |    7 |  0.083     |  2.850      |
++---------------------+--------------+------+------+------------+-------------+
+|select1/selectb/_and |              |      |      |            |             |
+|                0000 |         Local|      |    7 |  0.061     |  2.289      |
 +---------------------+--------------+------+------+------------+-------------+
 
 * Net Skew is the difference between the minimum and maximum routing
@@ -168,15 +172,15 @@ the minimum and maximum path delays which includes logic delays.
 
 The NUMBER OF SIGNALS NOT COMPLETELY ROUTED for this design is: 0
 
-   The AVERAGE CONNECTION DELAY for this design is:        2.358
-   The MAXIMUM PIN DELAY IS:                              10.245
-   The AVERAGE CONNECTION DELAY on the 10 WORST NETS is:   8.763
+   The AVERAGE CONNECTION DELAY for this design is:        2.329
+   The MAXIMUM PIN DELAY IS:                              10.680
+   The AVERAGE CONNECTION DELAY on the 10 WORST NETS is:   9.230
 
    Listing Pin Delays by value: (nsec)
 
     d < 2.00   < d < 4.00  < d < 6.00  < d < 8.00  < d < 11.00  d >= 11.00
    ---------   ---------   ---------   ---------   ---------   ---------
-       14013        8132        4035         824         140           0
+       14637        7957        4563         746          81           0
 
 Timing Score: 0
 
@@ -187,7 +191,7 @@ Asterisk (*) preceding a constraint indicates it was not met.
   Constraint                                | Requested  | Actual     | Logic  | Absolute   |Number of
                                             |            |            | Levels | Slack      |errors   
 ------------------------------------------------------------------------------------------------------
-  Autotimespec constraint for clock net clo | N/A        | 22.020ns   | 10     | N/A        | N/A     
+  Autotimespec constraint for clock net clo | N/A        | 19.923ns   | 9      | N/A        | N/A     
   ck_BUFGP                                  |            |            |        |            |         
 ------------------------------------------------------------------------------------------------------
 
@@ -201,10 +205,10 @@ Generating Pad Report.
 
 All signals are completely routed.
 
-Total REAL time to PAR completion: 5 mins 26 secs 
-Total CPU time to PAR completion: 4 mins 32 secs 
+Total REAL time to PAR completion: 4 mins 9 secs 
+Total CPU time to PAR completion: 4 mins 2 secs 
 
-Peak Memory Usage:  265 MB
+Peak Memory Usage:  282 MB
 
 Placement: Completed - No errors found.
 Routing: Completed - No errors found.
