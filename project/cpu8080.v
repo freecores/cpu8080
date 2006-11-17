@@ -106,6 +106,8 @@
 `define cpus_movrtra  6'h20 // move read to read address
 `define cpus_accimm   6'h21 // accumulator immediate operations
 `define cpus_daa      6'h22 // DAA completion
+`define cpus_call     6'h23 // CALL completion
+`define cpus_ret      6'h24 // RET completion
 
 //
 // Register numbers
@@ -157,6 +159,7 @@
 `define mac_in         51 // IN
 `define mac_out        52 // OUT
 `define mac_rst        53 // RST
+`define mac_ret        55 // RET
 
 module cpu8080(addr,     // Address out
                data,     // Data bus
@@ -884,7 +887,6 @@ module cpu8080(addr,     // Address out
                      // after call
                      if (intcyc) { wdatahold2, wdatahold } <= pc;
                      else { wdatahold2, wdatahold } <= pc+3;
-                     sp <= sp-2; // pushdown stack
                      statesel <= `mac_call; // finish CALL
                      state <= `cpus_read;
 
@@ -896,7 +898,6 @@ module cpu8080(addr,     // Address out
                      raddrhold <= pc+1; // pick up call address
                      waddrhold <= sp-2; // place address on stack
                      { wdatahold2, wdatahold } <= pc+3; // of address after call
-                     sp <= sp-2; // pushdown stack
                      statesel <= `mac_call; // finish CALL
                      // choose continue or read according to condition
                      case (opcode[5:3]) // decode flag cases
@@ -926,8 +927,7 @@ module cpu8080(addr,     // Address out
                   6'b001001: begin // RET
 
                      raddrhold <= sp; // read from stack
-                     sp <= sp+2; // pushup stack
-                     statesel <= `mac_jmp; // finish JMP
+                     statesel <= `mac_ret; // finish RET
                      state <= `cpus_read;
 
                   end
@@ -936,8 +936,7 @@ module cpu8080(addr,     // Address out
                   6'b101000, 6'b110000, 6'b111000: begin // Rcc
 
                      raddrhold <= sp; // read from stack
-                     sp <= sp+2; // pushup stack
-                     statesel <= `mac_jmp; // finish JMP
+                     statesel <= `mac_ret; // finish JMP
                      // choose read or continue according to condition
                      case (opcode[5:3]) // decode flag cases
 
@@ -1141,6 +1140,22 @@ module cpu8080(addr,     // Address out
 
       `cpus_jmp: begin // jump address
 
+         state <= `cpus_fetchi; // and return to instruction fetch
+         pc <= { rdatahold, rdatahold2 };
+
+      end
+
+      `cpus_call: begin // call address
+
+         sp <= sp-2; // pushdown stack
+         state <= `cpus_fetchi; // and return to instruction fetch
+         pc <= { rdatahold, rdatahold2 };
+
+      end
+
+      `cpus_ret: begin // return from call
+
+         sp <= sp+2; // pushup stack
          state <= `cpus_fetchi; // and return to instruction fetch
          pc <= { rdatahold, rdatahold2 };
 
@@ -1448,7 +1463,7 @@ module cpu8080(addr,     // Address out
       47: nextstate = `cpus_read; // double read
       48: nextstate = `cpus_write; // then write
       49: nextstate = `cpus_write; // double write
-      50: nextstate = `cpus_jmp; // then go to that
+      50: nextstate = `cpus_call; // then go to that
 
       // mac_in: IN
 
@@ -1462,6 +1477,11 @@ module cpu8080(addr,     // Address out
 
       53: nextstate = `cpus_write; // double write
       54: nextstate = `cpus_jmp; // then go to that
+
+      // mac_ret: RET
+
+      55: nextstate = `cpus_read; // double read
+      56: nextstate = `cpus_ret; // then go to that
 
       default nextstate = 6'bx; // other states never reached
 

@@ -11,13 +11,18 @@
 <msg type="warning" file="Place" num="837" delta="unknown" >Partially locked IO Bus is found. 
 <arg fmt="%s" index="1"> Following components of the bus are not locked: 
 	 Comp: addr&lt;15&gt;
-	 Comp: addr&lt;14&gt;
-	 Comp: addr&lt;13&gt;
-	 Comp: addr&lt;12&gt;
-	 Comp: addr&lt;11&gt;
-	 Comp: addr&lt;10&gt;
-	 Comp: addr&lt;9&gt;
-	 Comp: addr&lt;8&gt;
+</arg>
+</msg>
+
+<msg type="warning" file="Place" num="837" delta="unknown" >Partially locked IO Bus is found. 
+<arg fmt="%s" index="1"> Following components of the bus are not locked: 
+	 Comp: diag&lt;6&gt;
+	 Comp: diag&lt;5&gt;
+	 Comp: diag&lt;4&gt;
+	 Comp: diag&lt;3&gt;
+	 Comp: diag&lt;2&gt;
+	 Comp: diag&lt;1&gt;
+	 Comp: diag&lt;0&gt;
 </arg>
 </msg>
 

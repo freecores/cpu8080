@@ -33,8 +33,7 @@ public:
     void connectSigs();
     void reset();
     virtual void archImplement();
-    HSim__s1 us[34];
-    HSim__s3 uv[1];
+    HSim__s1 us[33];
 };
 
 #endif

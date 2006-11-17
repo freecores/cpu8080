@@ -2,22 +2,22 @@
    ./cpu8080_tbw_isim_beh.exe
      -intstyle  ise
      -ipchost  localhost
-     -ipcport  1963
+     -ipcport  1113
 
-Thu Nov 09 00:44:05 2006
+Thu Nov 16 21:40:48 2006
 
-Total Line Count = 4336
+Total Line Count = 5672
 
  Elaboration time 0 sec.
 
- Estimate current memory usage 36.4954 Meg. 
+ Estimate current memory usage 36.6961 Meg. 
 
- Total signals 320
- Total nets 527
- Total signal drivers 181
+ Total signals 322
+ Total nets 542
+ Total signal drivers 184
  Total blocks 39
  Total primitive blocks 28
- Total processes 183
+ Total processes 186
 ntrace select -o on -n /cpu8080_tbw/clock 
 ntrace select -o on -n /cpu8080_tbw/writemem 
 ntrace select -o on -n /cpu8080_tbw/readmem 
@@ -29,10 +29,15 @@ ntrace select -o on -n /cpu8080_tbw/waitr
 ntrace select -o on -n /cpu8080_tbw/intr 
 ntrace select -o on -n /cpu8080_tbw/inta 
 ntrace select -o on -n /cpu8080_tbw/UUT/reset 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/rd 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/pixeldata 
-ntrace select -o on -n /cpu8080_tbw/UUT/adm3a/display/fchsta 
 ntrace start 
+run all 
+Simulator is doing circuit initialization process.
+Finished circuit initialization process.
+restart
+run all 
+Simulator is doing circuit initialization process.
+Finished circuit initialization process.
+restart
 run all 
 Simulator is doing circuit initialization process.
 Finished circuit initialization process.

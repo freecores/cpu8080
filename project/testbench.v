@@ -68,7 +68,7 @@ module testbench(addr,     // Address out
                reset, clock);
 
    // Program rom
-   rom rom(addr[9:0], data, romsel&readmem); // unclocked rom
+   rom rom(addr[10:0], data, romsel&readmem); // unclocked rom
 
    // neg clocked ram
    ram ram(addr[9:0], data, ramsel, readmem, writemem, bootstrap, clock);
@@ -548,12 +548,12 @@ endmodule
 
 module rom(addr, data, dataeno);
 
-   input [9:0] addr;
+   input [10:0] addr;
    inout [7:0] data;
    input dataeno;
 
    reg [7:0] datao;
-   
+
    always @(addr) case (addr)
 
       `include "test.rom" // get contents of memory

@@ -1,23 +1,23 @@
 V3 56
-FL $XILINX/ISEexamples/cpu8080/vga.vhd 2006/11/08.22:19:48 I.33
-PH work/vga_pckg 1163059899        FL $XILINX/ISEexamples/cpu8080/vga.vhd LB unisim \
+FL $XILINX/ISEexamples/cpu8080/vga.vhd 2006/11/15.08:45:56 I.33
+PH work/vga_pckg 1163739302        FL $XILINX/ISEexamples/cpu8080/vga.vhd LB unisim \
       PB ieee/std_logic_1164 1153526780 PB ieee/NUMERIC_STD 1153526794 \
       PH unisim/VCOMPONENTS 1153527310 PB work/common 1162002891 CD vga
-EN work/vga 1163059900             FL $XILINX/ISEexamples/cpu8080/vga.vhd LB unisim \
+EN work/vga 1163739303             FL $XILINX/ISEexamples/cpu8080/vga.vhd LB unisim \
       PB ieee/std_logic_1164 1153526780 PB ieee/NUMERIC_STD 1153526794 \
       PH unisim/VCOMPONENTS 1153527310 PB work/common 1162002891
-AR work/vga/vga_arch 1163059901    FL $XILINX/ISEexamples/cpu8080/vga.vhd EN work/vga 1163059900 \
+AR work/vga/vga_arch 1163739304    FL $XILINX/ISEexamples/cpu8080/vga.vhd EN work/vga 1163739303 \
       CP sync
-EN work/sync 1163059902            FL $XILINX/ISEexamples/cpu8080/vga.vhd LB unisim \
+EN work/sync 1163739305            FL $XILINX/ISEexamples/cpu8080/vga.vhd LB unisim \
       PB ieee/std_logic_1164 1153526780 PB ieee/NUMERIC_STD 1153526794 \
       PH unisim/VCOMPONENTS 1153527310 PB work/common 1162002891
-AR work/sync/sync_arch 1163059903  FL $XILINX/ISEexamples/cpu8080/vga.vhd EN work/sync 1163059902
+AR work/sync/sync_arch 1163739306  FL $XILINX/ISEexamples/cpu8080/vga.vhd EN work/sync 1163739305
 FL $XILINX/ISEexamples/cpu8080/cpu_tbw.ant 2006/10/28.09:13:00 I.33
 MO work/cpu_tbw         FL $XILINX/ISEexamples/cpu8080/cpu_tbw.ant MI testbench
-FL $XILINX/ISEexamples/cpu8080/cpu8080.v 2006/11/04.17:39:26 I.33
+FL $XILINX/ISEexamples/cpu8080/cpu8080.v 2006/11/16.20:07:40 I.33
 MO work/cpu8080         FL $XILINX/ISEexamples/cpu8080/cpu8080.v MI alu
 MO work/alu             FL $XILINX/ISEexamples/cpu8080/cpu8080.v
-FL $XILINX/ISEexamples/cpu8080/vgachr.v 2006/11/09.00:42:54 I.33
+FL $XILINX/ISEexamples/cpu8080/vgachr.v 2006/11/15.08:51:40 I.33
 MO work/terminal        FL $XILINX/ISEexamples/cpu8080/vgachr.v MI chrmemmap \
       MI ps2_kbd        MI scnrom         MI scnromu
 MO work/chrmemmap       FL $XILINX/ISEexamples/cpu8080/vgachr.v MI chrrom MI vga
@@ -28,7 +28,7 @@ FL $XILINX/ISEexamples/cpu8080/cpu8080_tbw.tfw 2006/11/04.23:09:58 I.33
 MO work/cpu8080_tbw     FL $XILINX/ISEexamples/cpu8080/cpu8080_tbw.tfw \
       MI testbench
 FL test.lst 2006/11/04.23:37:34 I.33
-FL $XILINX/ISEexamples/cpu8080/testbench.v 2006/11/08.21:58:30 I.33 FL test.rom
+FL $XILINX/ISEexamples/cpu8080/testbench.v 2006/11/16.21:40:32 I.33 FL test.rom
 MO work/testbench       FL $XILINX/ISEexamples/cpu8080/testbench.v MI cpu8080 \
       MI intcontrol     MI ram            MI rom            MI select         MI terminal
 MO work/select          FL $XILINX/ISEexamples/cpu8080/testbench.v MI selectone
@@ -38,7 +38,7 @@ MO work/rom             FL $XILINX/ISEexamples/cpu8080/testbench.v
 MO work/ram             FL $XILINX/ISEexamples/cpu8080/testbench.v
 FL $XILINX/verilog/src/glbl.v 2006/05/17.11:09:08 I.33
 MO work/glbl            FL $XILINX/verilog/src/glbl.v
-FL test.rom 2006/11/05.09:53:26 I.33
+FL test.rom 2006/11/16.21:40:18 I.33
 FL $XILINX/ISEexamples/cpu8080/ps2_kbd.vhd 2006/11/08.21:59:14 I.33
 PH work/ps2_kbd_pckg 1163059896    FL $XILINX/ISEexamples/cpu8080/ps2_kbd.vhd \
       PB ieee/std_logic_1164 1153526780 PB ieee/NUMERIC_STD 1153526794 CD ps2_kbd
