@@ -36,15 +36,6 @@ Pin CE of cpu/addr_1
 Pin CE of cpu/addr_2</arg>
 </msg>
 
-<msg type="warning" file="Pack" num="266" delta="unknown" >The function generator <arg fmt="%s" index="1">adm3a/display/chradr&lt;5&gt;35</arg> failed to merge with F5 multiplexer <arg fmt="%s" index="2">adm3a/display/chradr&lt;6&gt;_f5_3</arg>.  <arg fmt="%z" index="3">There is a conflict for the FXMUX.</arg>  The design will exhibit suboptimal timing.
-</msg>
-
-<msg type="warning" file="Pack" num="266" delta="unknown" >The function generator <arg fmt="%s" index="1">cpu/_mux0003_SW1</arg> failed to merge with F5 multiplexer <arg fmt="%s" index="2">cpu/_mux0003</arg>.  <arg fmt="%z" index="3">There is a conflict for the FXMUX.</arg>  The design will exhibit suboptimal timing.
-</msg>
-
-<msg type="warning" file="Pack" num="266" delta="unknown" >The function generator <arg fmt="%s" index="1">cpu/_mux0003_SW1</arg> failed to merge with F5 multiplexer <arg fmt="%s" index="2">cpu/_mux00071_f5</arg>.  <arg fmt="%z" index="3">There is a conflict for the FXMUX.</arg>  The design will exhibit suboptimal timing.
-</msg>
-
 <msg type="warning" file="PhysDesignRules" num="372">Gated clock. Clock net select1/selectc/_and0000 is sourced by a combinatorial pin. This is not good design practice. Use the CE pin to control the loading of data into the flip-flop.
 </msg>
 
