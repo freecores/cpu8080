@@ -19,4 +19,4 @@ al test > test.lst
 rem
 rem Put into "rom" format suitable for verilog
 rem
-genrom testr.obj > test.rom
+genrom test.obj > test.rom

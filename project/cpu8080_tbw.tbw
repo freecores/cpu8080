@@ -7,7 +7,7 @@ cpu8080_tbw.xwv
 Clocked
 -
 -
-100000000000
+200000000000
 ns
 GSR:true
 PRLD:false
@@ -27,6 +27,8 @@ clock
 b
 clock
 data
+clock
+diag
 clock
 g
 clock
@@ -62,6 +64,7 @@ SIGNAL_LIST_END
 SIGNALS_NOT_ON_DISPLAY
 addr_DIFF
 b_DIFF
+diag_DIFF
 g_DIFF
 hsync_n_DIFF
 inta_DIFF
@@ -70,6 +73,7 @@ r_DIFF
 readio_DIFF
 readmem_DIFF
 vsync_n_DIFF
+waitr_DIFF
 writeio_DIFF
 writemem_DIFF
 SIGNALS_NOT_ON_DISPLAY_END
@@ -96,6 +100,7 @@ hsync_n
 vsync_n
 ps2_clk
 ps2_data
+diag
 SIGNAL_ORDER_END
 -X-X-X-
 
