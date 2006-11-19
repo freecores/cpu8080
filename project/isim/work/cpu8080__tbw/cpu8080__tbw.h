@@ -259,7 +259,7 @@ public:
     };
     cu13 u13;
     HSim__s1 us[15];
-    HSim__s3 uv[7];
+    HSim__s3 uv[6];
     HSimVlogParam up[3];
 };
 

@@ -2,10 +2,6 @@
 // Company:                                                                   //  
 // Engineer:       Scott Moore                                                //
 //                                                                            //
-// Additional contributions by:                                               //
-//                                                                            //
-// Chris N. Strahm - Modifications for Altera Quartus build.                  //
-//                                                                            //
 // Create Date:    11:45:32 09/04/2006                                        // 
 // Design Name:                                                               // 
 // Module Name:    cpu8080                                                    //
@@ -68,31 +64,27 @@
 // Revision 0.01 - File Created                                               //
 // Additional Comments:                                                       //
 //                                                                            //
+//  Modifications, commented by 'CNS' below, NOV-12-2006 Chris N. Strahm      //
+//	(1)	Fixed warnings due to bit width truncations, assignment sizes.        //
+//  (2) Changed tristate data bus to din,dout. Better for internal FPGA use.  // 
+//  (3) Removed waitr line, hard assigned to 0.  Not much use in FPGA's.      //
+//  (4) Implemented INTR hardware vectoring.  Orig 8080 external INT vector   //
+//      scheme not useful for FPGAs with other soft core perfs. Added inputs: //
+//      INTR[1] - Vector/Reset to 0008H                                       // 
+//      INTR[2] - Vector/Reset to 0010H                                       // 
+//      INTR[3] - Vector/Reset to 0018H                                       //
+//      INTR[4] - Vector/Reset to 0020H                                       //
+//      INTR[5] - Vector/Reset to 0028H                                       //
+//      INTR[6] - Vector/Reset to 0030H                                       //
+//      INTR[7] - Vector/Reset to 0038H                                       //
+//  Note: Unused intr lines can just be assigned/wired to 0.                  //
+//  Note: inta is still provided as a common ack to any intr.                 //
+//  Note: Program execution origin at 0H should now jump to >= 0040H to begin //
+//        main code to skip over the interrupt vector locations.              //
+//                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
 `timescale 1ns / 1ps
-
-//
-// Build option
-//
-// Uncomment this line to build without wait state ability. Many FPGA 
-// applications don't require wait states. This can save silicon area.
-//
-// Defining this option will cause the wait line to be ignored.
-//
-// `define NOWAIT
-
-//
-// Build option
-//
-// Uncomment this line to build without I/O instruction ability. An application
-// may have memory mapped I/O only, and not require I/O instructions. This can
-// save silicon area.
-//
-// Defining this option will cause I/O instructions to be treated as no-ops.
-// alternately, you can modify what they do.
-//
-// `define NOIO
 
 //
 // CPU states
@@ -133,11 +125,6 @@
 `define cpus_movrtra  6'h20 // move read to read address
 `define cpus_accimm   6'h21 // accumulator immediate operations
 `define cpus_daa      6'h22 // DAA completion
-`define cpus_call     6'h23 // CALL completion
-`define cpus_ret      6'h24 // RET completion
-`define cpus_movtalua 6'h25 // move to alu a
-`define cpus_movtalub 6'h26 // move to alu b
-`define cpus_indm     6'h27 // inc/dec m
 
 //
 // Register numbers
@@ -172,51 +159,66 @@
 `define mac_readbtoreg 2  // read a byte, place in register
 `define mac_readdtobc  4  // read double byte to BC
 `define mac_readdtode  6  // read double byte to DE
-`define mac_readdtohl  8 // read double byte to HL
+`define mac_readdtohl  8  // read double byte to HL
 `define mac_readdtosp  10 // read double byte to SP
 `define mac_readbmtw   12 // read byte and move to write
-`define mac_readbmtr   15 // read byte and move to register
-`define mac_sta        17 // STA
-`define mac_lda        21 // LDA
-`define mac_shld       26 // SHLD
-`define mac_lhld       31 // LHLD
-`define mac_writedbyte 37 // write double byte
-`define mac_pop        39 // POP
-`define mac_xthl       41 // XTHL
-`define mac_accimm     45 // accumulator immediate
-`define mac_jmp        46 // JMP
-`define mac_call       48 // CALL
-`define mac_in         52 // IN
-`define mac_out        53 // OUT
-`define mac_rst        54 // RST
-`define mac_ret        56 // RET
-`define mac_alum       58 // op a,m
-`define mac_indm       60 // inc/dec m
+`define mac_readbmtr   14 // read byte and move to register
+`define mac_sta        16 // STA
+`define mac_lda        20 // LDA
+`define mac_shld       25 // SHLD
+`define mac_lhld       30 // LHLD
+`define mac_writedbyte 36 // write double byte
+`define mac_pop        38 // POP
+`define mac_xthl       40 // XTHL
+`define mac_accimm     44 // accumulator immediate
+`define mac_jmp        45 // JMP
+`define mac_call       47 // CALL
+`define mac_in         51 // IN
+`define mac_out        52 // OUT
+`define mac_rst        53 // RST
 
-module cpu8080(addr,     // Address out
-               data,     // Data bus
+//
+// Reset/Int Opcodes  (CNS)
+//
+`define opcode_reset_0 8'b11000111 // reset int vector to 0000H
+`define opcode_reset_1 8'b11001111 // reset int vector to 0008H
+`define opcode_reset_2 8'b11010111 // reset int vector to 0010H
+`define opcode_reset_3 8'b11011111 // reset int vector to 0018H
+`define opcode_reset_4 8'b11100111 // reset int vector to 0020H
+`define opcode_reset_5 8'b11101111 // reset int vector to 0028H
+`define opcode_reset_6 8'b11110111 // reset int vector to 0030H
+`define opcode_reset_7 8'b11111111 // reset int vector to 0038H
+
+
+module M8080  (addr,     // Address out
+               dout,     // Data Output bus
+               din,      // Data Input  bus
                readmem,  // Memory read   
                writemem, // Memory write
                readio,   // Read I/O space
                writeio,  // Write I/O space
-               intr,     // Interrupt request 
-               inta,     // Interrupt request 
-               waitr,    // Wait request
+               intr,     // Interrupt request bus, hard wire vector select [7:1] CNS
+               inta,     // Interrupt acknowledge, common to any intr 
                reset,    // Reset
-               clock);   // System clock
+//               waitr,    // Wait request  CNS
+               clock	 // Clock
+               );   // System clock
 
    output [15:0] addr;
-   inout  [7:0] data;
+   input  [7:0] din;
+   output [7:0] dout;
    output readmem;
    output writemem;
    output readio;
    output writeio;
-   input  intr;
+   input  [7:1] intr; // CNS
    output inta;
-   input  waitr;
+//   input  waitr;   CNS
    input  reset;
-   input  clock;
+   input  clock; // synthesis clock 
     
+   wire   waitr = 1'b0;		// no extra wait states, lock low, CNS
+
    // Output or input lines that need to be registered
     
    reg           readmem;
@@ -233,7 +235,7 @@ module cpu8080(addr,     // Address out
    reg    [5:0]  state;       // CPU state machine
    reg    [2:0]  regd;        // Destination register
    reg    [7:0]  datao;       // Data output register
-   reg           dataeno;     // Enable output data
+//   reg           dataeno;     // Enable output data CNS
    reg    [15:0] waddrhold;   // address holding for write
    reg    [15:0] raddrhold;   // address holding for read
    reg    [7:0]  wdatahold;   // single byte write data holding
@@ -253,13 +255,13 @@ module cpu8080(addr,     // Address out
 
    // The flags are represented individually
 
-   reg           carry; // carry bit
-   reg           auxcar; // auxiliary carry bit
-   reg           sign; // sign bit
-   reg           zero; // zero bit
-   reg           parity; // parity bit
-   reg           ei; // interrupt enable
-   reg           intcyc; // in interrupt cycle
+   reg           carry; 	// carry bit
+   reg           auxcar; 	// auxiliary carry bit
+   reg           sign; 		// sign bit
+   reg           zero; 		// zero bit
+   reg           parity; 	// parity bit
+   reg           ei; 		// interrupt enable
+   reg           intcyc; 	// in interrupt cycle
 
    // ALU communication
 
@@ -271,48 +273,50 @@ module cpu8080(addr,     // Address out
    wire          alupar;  // parity out
    wire          aluaxc;  // auxiliary carry
    reg    [2:0]  alusel;  // alu operational select
-    
+   wire 		 aluzout; // CNS
+   wire			 alusout; // CNS   
+ 
    // Instantiate the ALU
 
-   alu alu(alures, aluopra, aluoprb, alucin, alucout, aluzout, alusout, alupar,
-           aluaxc, alusel);
+   alu alu(alures, aluopra, aluoprb, alucin, alucout, aluzout, alusout, alupar, aluaxc, alusel);
    
    always @(posedge clock)
       if (reset) begin // syncronous reset actions
        
-      state    <= `cpus_fetchi; // Clear CPU state to initial fetch
-      pc       <= 0; // reset program counter to 1st location
-      dataeno  <= 0; // get off the data bus
-      readmem  <= 0; // all signals out false
-      writemem <= 0;
-      readio   <= 0;
-      writeio  <= 0;
-      inta     <= 0;
-      intcyc   <= 0;
-      ei       <= 1; // interrupts on by default
-      eienb    <= 0;
+      state   <= `cpus_fetchi; // Clear CPU state to initial fetch
+      pc      <= 0; // reset program counter to 1st location
+//      dataeno <= 0; // get off the data bus CNS
+      readmem <= 0; // all signals out false
+      writemem<= 0;
+      readio  <= 0;
+      writeio <= 0;
+      inta    <= 0;
+      intcyc  <= 0;
+      ei      <= 1;
+      eienb   <= 0;
 
    end else case (state)
        
       `cpus_fetchi: begin // start of instruction fetch
        
-         // if interrupt request is on, enter interrupt cycle, else exit it now
-         if (intr&&ei) begin
+         // if any interrupt request is on, enter interrupt cycle, else exit it now
+         if (ei&&(intr[1]||intr[2]||intr[3]||intr[4]||intr[5]||intr[6]||intr[7])) begin	// CNS
+//         if (intr&&ei) begin
 
-            intcyc <= 1; // enter interrupt cycle
-            inta   <= 1; // activate interrupt acknowledge
-            ei     <= 0; // disable interrupts
+            intcyc <= 1;	// enter interrupt cycle
+            inta <= 1; 		// activate interrupt acknowledge
+            ei <= 0; 		// disable interrupts
 
          end else begin
 
-            intcyc  <= 0; // leave interrupt cycle
-            readmem <= 1; // activate instruction memory read
+            intcyc <= 0; 	// leave interrupt cycle
+            readmem <= 1; 	// activate instruction memory read
 
          end
             
-         addr <= pc; // place current program count on output
+         addr <= pc; 		// place current program count on output
          if (eienb) ei <=1; // process delayed interrupt enable
-         eienb <=0; // reset interrupt enabler
+         eienb <=0; 		// reset interrupt enabler
          state <= `cpus_fetchi2; // next state
        
       end
@@ -325,18 +329,27 @@ module cpu8080(addr,     // Address out
 
       `cpus_fetchi3: begin // complete instruction memory read
 
-`ifndef NOWAIT
-         if (!waitr) 
-`endif
-            begin // no wait selected, otherwise cycle
+         if (!waitr) begin // no wait selected, otherwise cycle
 
-            opcode <= data; // latch opcode
-            readmem <= 0; // Deactivate instruction memory read
-            inta <= 0; // and interrupt acknowledge
+			// CNS: If we have an intr, then force the opcode to rst#
+			// else read the op code from the data input as usual. 
+			if (intcyc) begin		// for an int cycle
+				if (intr[1]) opcode <= `opcode_reset_1;	// int vector to 0008H
+				if (intr[2]) opcode <= `opcode_reset_2;	// int vector to 0010H
+				if (intr[3]) opcode <= `opcode_reset_3;	// int vector to 0018H
+				if (intr[4]) opcode <= `opcode_reset_4;	// int vector to 0020H
+				if (intr[5]) opcode <= `opcode_reset_5;	// int vector to 0028H
+				if (intr[6]) opcode <= `opcode_reset_6;	// int vector to 0030H
+				if (intr[7]) opcode <= `opcode_reset_7;	// int vector to 0038H
+                intcyc <= 0; 		// we will kill the intcyc here, don't need it further
+			end else opcode <= din;	// latch/read opcode CNS
+
+            readmem <= 0; 			// Deactivate instruction memory read
+            inta <= 0; 				// Deactivate interrupt acknowledge
             state <= `cpus_fetchi4; // next state
 
          end
-   
+         
       end
        
       `cpus_fetchi4: begin // complete instruction memory read
@@ -355,7 +368,7 @@ module cpu8080(addr,     // Address out
                      // yes, do nothing
 
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte  CNS
 
                   end
 
@@ -363,7 +376,7 @@ module cpu8080(addr,     // Address out
 
                      carry <= 1; // set carry flag
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte CNS
 
                   end
 
@@ -371,7 +384,7 @@ module cpu8080(addr,     // Address out
 
                      carry <= ~carry; // complement carry flag
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte CNS
 
                   end
 
@@ -379,7 +392,7 @@ module cpu8080(addr,     // Address out
 
                      regfil[`reg_a] <= ~regfil[`reg_a]; // complement accumulator
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte CNS
 
                   end
 
@@ -388,10 +401,14 @@ module cpu8080(addr,     // Address out
                      // decimal adjust accumulator, or remove by carry any 
                      // results in nybbles greater than 9
 
-                     if (regfil[`reg_a][3:0] > 9 || auxcar)
-                        { auxcar, regfil[`reg_a] } <= regfil[`reg_a]+8'h06;
+                     if (regfil[`reg_a][3:0] > 9 || auxcar) begin
+
+                        { carry, regfil[`reg_a] } <= regfil[`reg_a]+ 3'b110;  // CNS 6
+                        auxcar <= ((regfil[`reg_a][3:0]+6 >> 4) & 1'b1) ? 1'b1:1'b0; // cns
+
+                     end
                      state <= `cpus_daa; // finish DAA
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -405,14 +422,8 @@ module cpu8080(addr,     // Address out
                      aluoprb <= 1; // load 1 as alu b
                      if (opcode[0]) alusel <= `aluop_sub; // set subtract
                      else alusel <= `aluop_add; // set add
-                     if (opcode[5:3] == `reg_m) begin
-
-                        raddrhold <= regfil[`reg_h]<<8|regfil[`reg_l];
-                        statesel <= `mac_indm; // inc/dec m
-                        state <= `cpus_read; // read byte
-
-                     end else state <= `cpus_indcb; // go inr/dcr cycleback
-                     pc <= pc+16'h1; // Next instruction byte
+                     state <= `cpus_indcb; // go inr/dcr cycleback
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -420,12 +431,12 @@ module cpu8080(addr,     // Address out
 
                      wdatahold <= regfil[`reg_a]; // place A as source
                      if (opcode[4]) // use DE pair
-                        waddrhold <= regfil[`reg_d]<<8|regfil[`reg_e];
+                        waddrhold <= regfil[`reg_d]<<8|regfil[`reg_d];
                      else // use BC pair
                         waddrhold <= regfil[`reg_b] << 8|regfil[`reg_c];
                      statesel <= `mac_writebyte; // write byte
                      state <= `cpus_write;
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
                     
                   end
 
@@ -433,12 +444,12 @@ module cpu8080(addr,     // Address out
 
                      regd <= `reg_a; // set A as destination
                      if (opcode[4]) // use DE pair
-                        raddrhold <= regfil[`reg_d]<<8|regfil[`reg_e];
+                        raddrhold <= regfil[`reg_d]<<8|regfil[`reg_d];
                      else // use BC pair
                         raddrhold <= regfil[`reg_b]<<8|regfil[`reg_c];
                      statesel <= `mac_readbtoreg; // read byte to register
                      state <= `cpus_read;
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -448,7 +459,7 @@ module cpu8080(addr,     // Address out
                      { carry, regfil[`reg_a] } <= 
                         (regfil[`reg_a] << 1)+regfil[`reg_a][7];
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -457,7 +468,7 @@ module cpu8080(addr,     // Address out
                      // rotate left through carry
                      { carry, regfil[`reg_a] } <= (regfil[`reg_a] << 1)+carry;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -468,7 +479,7 @@ module cpu8080(addr,     // Address out
                         (regfil[`reg_a] >> 1)+(regfil[`reg_a][0] << 7);
                      carry <= regfil[`reg_a][0];
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -478,7 +489,7 @@ module cpu8080(addr,     // Address out
                      regfil[`reg_a] <= (regfil[`reg_a] >> 1)+(carry << 7);
                      carry <= regfil[`reg_a][0];
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -489,7 +500,7 @@ module cpu8080(addr,     // Address out
                         (regfil[`reg_h] << 8)+regfil[`reg_l]+
                         (regfil[`reg_b] << 8)+regfil[`reg_c];
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -500,7 +511,7 @@ module cpu8080(addr,     // Address out
                         (regfil[`reg_h] << 8)+regfil[`reg_l]+
                         (regfil[`reg_d] << 8)+regfil[`reg_e];
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -511,7 +522,7 @@ module cpu8080(addr,     // Address out
                         (regfil[`reg_h] << 8)+regfil[`reg_l]+
                         (regfil[`reg_h] << 8)+regfil[`reg_l];
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -521,7 +532,7 @@ module cpu8080(addr,     // Address out
                      { carry, regfil[`reg_h], regfil[`reg_l] } <= 
                         (regfil[`reg_h] << 8)+regfil[`reg_l]+sp;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -529,11 +540,11 @@ module cpu8080(addr,     // Address out
 
                      // increment BC, no flags set
                      regfil[`reg_b] <= 
-                        (((regfil[`reg_b] << 8)+regfil[`reg_c])+16'h1)>>8;
+                        (((regfil[`reg_b] << 8)+regfil[`reg_c])+1'b1)>>8;
                      regfil[`reg_c] <= 
-                        ((regfil[`reg_b] << 8)+regfil[`reg_c])+16'h1;
+                        ((regfil[`reg_b] << 8)+regfil[`reg_c])+1'b1;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -541,11 +552,11 @@ module cpu8080(addr,     // Address out
 
                      // increment DE, no flags set
                      regfil[`reg_d] <= 
-                        (((regfil[`reg_d] << 8)+regfil[`reg_e])+16'h1)>>8;
+                        (((regfil[`reg_d] << 8)+regfil[`reg_e])+1'b1)>>8;
                      regfil[`reg_e] <= 
-                        ((regfil[`reg_d] << 8)+regfil[`reg_e])+16'h1;
+                        ((regfil[`reg_d] << 8)+regfil[`reg_e])+1'b1;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -553,11 +564,11 @@ module cpu8080(addr,     // Address out
 
                      // increment HL, no flags set
                      regfil[`reg_h] <= 
-                        (((regfil[`reg_h] << 8)+regfil[`reg_l])+16'h1)>>8;
+                        (((regfil[`reg_h] << 8)+regfil[`reg_l])+1'b1)>>8;
                      regfil[`reg_l] <= 
-                        ((regfil[`reg_h] << 8)+regfil[`reg_l])+16'h1;
+                        ((regfil[`reg_h] << 8)+regfil[`reg_l])+1'b1;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -566,7 +577,7 @@ module cpu8080(addr,     // Address out
                      // increment SP, no flags set
                      sp <= sp + 16'b1;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -574,11 +585,11 @@ module cpu8080(addr,     // Address out
 
                      // decrement BC, no flags set
                      regfil[`reg_b] <= 
-                        (((regfil[`reg_b] << 8)+regfil[`reg_c])-16'h1)>>8;
+                        (((regfil[`reg_b] << 8)+regfil[`reg_c]) - 8'b1)>>8;
                      regfil[`reg_c] <= 
-                        ((regfil[`reg_b] << 8)+regfil[`reg_c])-16'h1;
+                        ((regfil[`reg_b] << 8)+regfil[`reg_c])- 8'b1;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc + 1'b1; // Next instruction byte
 
                   end
 
@@ -586,11 +597,11 @@ module cpu8080(addr,     // Address out
 
                      // decrement DE, no flags set
                      regfil[`reg_d] <= 
-                        (((regfil[`reg_d] << 8)+regfil[`reg_e])-16'h1)>>8;
+                        (((regfil[`reg_d] << 8)+regfil[`reg_e]) - 8'b1)>>8;
                      regfil[`reg_e] <= 
-                        ((regfil[`reg_d] << 8)+regfil[`reg_e])-16'h1;
+                        ((regfil[`reg_d] << 8)+regfil[`reg_e])- 8'd11;	// cns 11
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc + 1'b1; // Next instruction byte
 
                   end
 
@@ -598,56 +609,57 @@ module cpu8080(addr,     // Address out
 
                      // decrement HL, no flags set
                      regfil[`reg_h] <= 
-                        (((regfil[`reg_h] << 8)+regfil[`reg_l])-16'h1)>>8;
+                        (((regfil[`reg_h] << 8)+regfil[`reg_l])- 8'b1)>>8;
                      regfil[`reg_l] <= 
-                        ((regfil[`reg_h] << 8)+regfil[`reg_l])-16'h1;
+                        ((regfil[`reg_h] << 8)+regfil[`reg_l]) - 8'b1;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+1'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
                   6'b111011: begin // DCX SP
 
                      // decrement SP, no flags set
-                     sp <= sp-16'b1;
+                     sp <= sp - 16'b1;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
                   6'b000001: begin // LXI B
 
-                     raddrhold <= pc+16'h1; // pick up after instruction
+                     raddrhold <= pc+1'b1; // pick up after instruction
                      statesel <= `mac_readdtobc; // read double to BC
                      state <= `cpus_read;
-                     pc <= pc+16'h3; // skip
+                     pc <= pc + 16'h3; // skip
 
                   end
 
                   6'b010001: begin // LXI D
 
-                     raddrhold <= pc+16'h1; // pick up after instruction
+                     raddrhold <= pc+1'b1; // pick up after instruction
                      statesel <= `mac_readdtode; // read double to DE
                      state <= `cpus_read;
-                     pc <= pc+16'h3; // skip
+                     pc <= pc + 16'h3; // skip
 
                   end
 
                   6'b100001: begin // LXI H
 
-                     raddrhold <= pc+16'h1; // pick up after instruction
+                     raddrhold <= pc+1'b1; // pick up after instruction
                      statesel <= `mac_readdtohl; // read double to HL
                      state <= `cpus_read;
-                     pc <= pc+16'h3; // skip
+                     pc <= pc + 16'h3; // skip
 
                   end
 
                   6'b110001: begin // LXI SP
 
-                     raddrhold <= pc+16'h1; // pick up after instruction
+                     raddrhold <= pc+1'b1; // pick up after instruction
+                     pc <= pc + 16'h3; // skip
                      statesel <= `mac_readdtosp; // read double to SP
                      state <= `cpus_read;
-                     pc <= pc+16'h3; // skip
+                     pc <= pc + 16'h3; // skip
 
                   end
 
@@ -656,7 +668,7 @@ module cpu8080(addr,     // Address out
 
                      // move immediate to register
                      regd <= opcode[5:3]; // set destination register
-                     raddrhold <= pc+16'h1; // set pickup address
+                     raddrhold <= pc+1'b1; // set pickup address
                      if (opcode[5:3] == `reg_m) begin // it's mvi m,imm
 
                         regd <= opcode[5:3]; // set destination register
@@ -667,14 +679,14 @@ module cpu8080(addr,     // Address out
                      end else 
                         statesel <= `mac_readbmtr; // read byte and move to register
                      state <= `cpus_read;
-                     pc <= pc+16'h2; // advance over byte
+                     pc <= pc + 16'h2; // advance over byte
 
                   end
 
                   6'b110010: begin // STA
 
                      wdatahold <= regfil[`reg_a]; // set write data
-                     raddrhold <= pc+16'h1; // set read address
+                     raddrhold <= pc+1'b1; // set read address
                      statesel <= `mac_sta; // perform sta
                      state <= `cpus_read;
                      pc <= pc + 16'h3; // next
@@ -683,11 +695,11 @@ module cpu8080(addr,     // Address out
 
                   6'b111010: begin // LDA
 
-                     raddrhold <= pc+16'h1; // set read address
+                     raddrhold <= pc+1'b1; // set read address
                      regd <= `reg_a; // set destination
                      statesel <= `mac_lda; // perform lda
                      state <= `cpus_read;
-                     pc <= pc+16'h3; // next
+                     pc <= pc + 16'h3; // next
 
                   end
 
@@ -695,19 +707,19 @@ module cpu8080(addr,     // Address out
 
                      wdatahold <= regfil[`reg_l]; // set write data
                      wdatahold2 <= regfil[`reg_h];
-                     raddrhold <= pc+16'h1; // set read address
+                     raddrhold <= pc+1'b1; // set read address
                      statesel <= `mac_shld; // perform SHLD
                      state <= `cpus_read;
-                     pc <= pc+16'h3; // skip
+                     pc <= pc + 16'h3; // next
 
                   end
 
                   6'b101010: begin // LHLD
 
-                     raddrhold <= pc+16'h1; // set read address
+                     raddrhold <= pc+1'b1; // set read address
                      statesel <= `mac_lhld; // perform LHLD
                      state <= `cpus_read;
-                     pc <= pc+16'h3; // skip
+                     pc <= pc + 16'h3; // next
 
                   end
 
@@ -717,7 +729,7 @@ module cpu8080(addr,     // Address out
                   6'b110000, 6'b110000: begin 
 
                      state <= `cpus_fetchi; // fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -745,7 +757,7 @@ module cpu8080(addr,     // Address out
                      state <= `cpus_read;
 
                   // Check memory destination, use state if so
-                  end else if (opcode[5:3] == `reg_m) begin
+                  end else if (regd == `reg_m) begin
 
                      // place hl as address
                      waddrhold <= regfil[`reg_h]<<8|regfil[`reg_l];
@@ -762,7 +774,7 @@ module cpu8080(addr,     // Address out
                   end
 
                end
-               pc <= pc+16'h1; // Next instruction byte
+               pc <= pc+1'b1; // Next instruction byte
              
             end
              
@@ -777,12 +789,13 @@ module cpu8080(addr,     // Address out
 
                   // set read address
                   raddrhold <= regfil[`reg_h]<<8|regfil[`reg_l];
-                  statesel <= `mac_alum; // alu from m
-                  state <= `cpus_read; // read byte
+                  regd <= `reg_a; // set destination always a
+                  statesel <= `mac_readbtoreg; // read byte to register
+                  state <= `cpus_read;
 
                end else
                   state <= `cpus_alucb; // go to alu cycleback
-               pc <= pc+16'h1; // Next instruction byte
+               pc <= pc+1'b1; // Next instruction byte
 
             end
              
@@ -792,8 +805,8 @@ module cpu8080(addr,     // Address out
 
                   6'b000101, 6'b010101, 6'b100101, 6'b110101: begin // PUSH
 
-                     waddrhold <= sp-16'h2; // write to stack
-                     sp <= sp-16'h2; // pushdown stack
+                     waddrhold <= sp - 16'h2; // write to stack
+                     sp <= sp - 16'h2; // pushdown stack
                      case (opcode[5:4]) // register set
 
                         2'b00: { wdatahold2, wdatahold } <= 
@@ -809,7 +822,7 @@ module cpu8080(addr,     // Address out
                      endcase
                      statesel <= `mac_writedbyte; // write double byte
                      state <= `cpus_write;
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -817,10 +830,10 @@ module cpu8080(addr,     // Address out
 
                      popdes <= opcode[5:4]; // set destination
                      raddrhold <= sp; // read from stack
-                     sp <= sp+16'h2; // pushup stack
+                     sp <= sp + 16'h2; // pushup stack
                      statesel <= `mac_pop; // perform POP
                      state <= `cpus_read;
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -831,7 +844,7 @@ module cpu8080(addr,     // Address out
                      regfil[`reg_h] <= regfil[`reg_d];
                      regfil[`reg_l] <= regfil[`reg_e];
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -843,7 +856,7 @@ module cpu8080(addr,     // Address out
                      wdatahold2 <= regfil[`reg_h];
                      statesel <= `mac_xthl; // perform XTHL
                      state <= `cpus_read;
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -851,7 +864,7 @@ module cpu8080(addr,     // Address out
 
                      sp <= { regfil[`reg_h], regfil[`reg_l] };
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -862,10 +875,10 @@ module cpu8080(addr,     // Address out
                      aluopra <= regfil[`reg_a]; // load as alu a
                      alusel <= opcode[5:3]; // set alu operation from instruction
                      alucin <= carry; // input carry
-                     raddrhold <= pc+16'h1; // read at PC
+                     raddrhold <= pc + 1'b1; // read at PC
                      statesel <= `mac_accimm; // finish accumulator immediate
                      state <= `cpus_read;
-                     pc <= pc+16'h2; // skip immediate byte
+                     pc <= pc + 16'h2; // skip immediate byte
 
                   end
 
@@ -878,7 +891,7 @@ module cpu8080(addr,     // Address out
 
                   6'b000011: begin // JMP
 
-                     raddrhold <= pc+16'h1; // pick up jump address
+                     raddrhold <= pc+1'b1; // pick up jump address
                      statesel <= `mac_jmp; // finish JMP
                      state <= `cpus_read;
   
@@ -887,7 +900,7 @@ module cpu8080(addr,     // Address out
                   6'b000010, 6'b001010, 6'b010010, 6'b011010, 6'b100010, 
                   6'b101010, 6'b110010, 6'b111010: begin // Jcc
 
-                     raddrhold <= pc+16'h1; // pick up jump address
+                     raddrhold <= pc+1'b1; // pick up jump address
                      statesel <= `mac_jmp; // finish JMP
                      // choose continue or read according to condition
                      case (opcode[5:3]) // decode flag cases
@@ -910,18 +923,19 @@ module cpu8080(addr,     // Address out
                                 else state <= `cpus_read;
 
                      endcase
-                     pc <= pc+16'h3; // advance after jump for false
+                     pc <= pc + 16'h3; // advance after jump for false
 
                   end
 
                   6'b001101: begin // CALL
 
-                     raddrhold <= pc+16'h1; // pick up call address
-                     waddrhold <= sp-16'h2; // place address on stack
+                     raddrhold <= pc+1'b1; // pick up call address
+                     waddrhold <= sp - 16'h2; // place address on stack
                      // if interrupt cycle, use current pc, else use address
                      // after call
                      if (intcyc) { wdatahold2, wdatahold } <= pc;
-                     else { wdatahold2, wdatahold } <= pc+16'h3;
+                     else { wdatahold2, wdatahold } <= pc + 16'h3;
+                     sp <= sp - 16'h2; // pushdown stack
                      statesel <= `mac_call; // finish CALL
                      state <= `cpus_read;
 
@@ -930,10 +944,10 @@ module cpu8080(addr,     // Address out
                   6'b000100, 6'b001100, 6'b010100, 6'b011100, 6'b100100, 
                   6'b101100, 6'b110100, 6'b111100: begin // Ccc
 
-                     raddrhold <= pc+16'h1; // pick up call address
-                     waddrhold <= sp-16'h2; // place address on stack
-                     // of address after call
-                     { wdatahold2, wdatahold } <= pc + 16'h3;
+                     raddrhold <= pc + 1'b1; // pick up call address
+                     waddrhold <= sp - 16'h2; // place address on stack
+                     { wdatahold2, wdatahold } <= pc + 16'h3; // of address after call
+                     sp <= sp - 16'h2; // pushdown stack
                      statesel <= `mac_call; // finish CALL
                      // choose continue or read according to condition
                      case (opcode[5:3]) // decode flag cases
@@ -956,14 +970,15 @@ module cpu8080(addr,     // Address out
                                 else state <= `cpus_read;
 
                      endcase
-                     pc <= pc+16'h3; // advance after jump for false
+                     pc <= pc + 16'h3; // advance after jump for false
 
                   end
 
                   6'b001001: begin // RET
 
                      raddrhold <= sp; // read from stack
-                     statesel <= `mac_ret; // finish RET
+                     sp <= sp + 16'h2; // pushup stack
+                     statesel <= `mac_jmp; // finish JMP
                      state <= `cpus_read;
 
                   end
@@ -972,7 +987,8 @@ module cpu8080(addr,     // Address out
                   6'b101000, 6'b110000, 6'b111000: begin // Rcc
 
                      raddrhold <= sp; // read from stack
-                     statesel <= `mac_ret; // finish JMP
+                     sp <= sp + 16'h2; // pushup stack
+                     statesel <= `mac_jmp; // finish JMP
                      // choose read or continue according to condition
                      case (opcode[5:3]) // decode flag cases
 
@@ -994,7 +1010,7 @@ module cpu8080(addr,     // Address out
                                 else state <= `cpus_read;
 
                      endcase
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -1002,13 +1018,13 @@ module cpu8080(addr,     // Address out
                   6'b101111, 6'b110111, 6'b111111: begin // RST
 
                      pc <= opcode & 8'b00111000; // place restart value in PC
-                     waddrhold <= sp-16'h2; // place address on stack
+                     waddrhold <= sp - 16'h2; // place address on stack
                      // if interrupt cycle, use current pc, else use address
                      // after call
                      if (intcyc) { wdatahold2, wdatahold } <= pc;
-                     else { wdatahold2, wdatahold } <= pc+16'h3;
-                     { wdatahold2, wdatahold } <= pc+16'h1; // of address after call
-                     sp <= sp-16'h2; // pushdown stack CNS
+                     else { wdatahold2, wdatahold } <= pc + 16'h3; // cns 
+                     { wdatahold2, wdatahold } <= pc + 1'b1; // of address after call CNS
+                     sp <= sp - 16'h2; // pushdown stack CNS
                      statesel <= `mac_writedbyte; // finish RST
                      state <= `cpus_write; // write to stack
 
@@ -1018,7 +1034,7 @@ module cpu8080(addr,     // Address out
 
                      eienb <= 1'b1; // set delayed interrupt enable
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
@@ -1026,39 +1042,27 @@ module cpu8080(addr,     // Address out
 
                      ei <= 1'b0;
                      state <= `cpus_fetchi; // Fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc+1'b1; // Next instruction byte
 
                   end
 
                   6'b011011: begin // IN p
 
-`ifndef NOIO
-                     // perform input
-                     raddrhold <= pc+1; // pick up byte I/O address
+                     raddrhold <= pc+1'b1; // pick up byte I/O address
+                     pc <= pc + 2'b10; // next
                      statesel <= `mac_in; // finish IN
                      state <= `cpus_read;
-                     pc <= pc+16'h2; // advance over byte
-`else
-                     // ignore instruction
-                     state <= `cpus_fetchi; // fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
-`endif       
+                     pc <= pc + 2'b10; // Next instruction byte
 
                   end
 
                   6'b010011: begin // OUT p
 
-`ifndef NOIO
-                     // perform output
-                     raddrhold <= pc+1; // pick up byte I/O address
+                     raddrhold <= pc+1'b1; // pick up byte I/O address
+                     pc <= pc + 2'b10; // next
                      statesel <= `mac_out; // finish OUT
                      state <= `cpus_read;
-                     pc <= pc+16'h2; // advance over byte
-`else
-                     // ignore instruction
-                     state <= `cpus_fetchi; // fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
-`endif       
+                     pc <= pc + 2'b10; // Next instruction byte
 
                   end
 
@@ -1068,7 +1072,7 @@ module cpu8080(addr,     // Address out
                   6'b111101: begin
 
                      state <= `cpus_fetchi; // fetch next instruction
-                     pc <= pc+16'h1; // Next instruction byte
+                     pc <= pc + 2'b10; // Next instruction byte, cns 2
 
                   end
 
@@ -1093,7 +1097,7 @@ module cpu8080(addr,     // Address out
          waddrhold <= waddrhold + 1'b1; // next address
          datao <= wdatahold; // set data to output
          wdatahold <= wdatahold2; // next data
-         dataeno <= 1; // enable output data
+//         dataeno <= 1; // enable output data CNS
          state <= `cpus_write2; // next state
          
       end
@@ -1107,10 +1111,7 @@ module cpu8080(addr,     // Address out
 
       `cpus_write3: begin // continue write #3
 
-`ifndef NOWAIT
-         if (!waitr) 
-`endif
-            begin // no wait selected, otherwise cycle
+         if (!waitr) begin // no wait selected, otherwise cycle
 
             writemem <= 0; // disable write memory data
             state <= `cpus_write4; // idle hold time
@@ -1121,9 +1122,9 @@ module cpu8080(addr,     // Address out
 
       `cpus_write4: begin // continue write #4
 
-         dataeno <= 0; // disable output data
+//         dataeno <= 0; // disable output data CNS
          state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro 
+         statesel <= statesel+1'b1; // and index next in macro 
 
       end
 
@@ -1134,7 +1135,7 @@ module cpu8080(addr,     // Address out
       `cpus_read: begin
 
          addr <= raddrhold; // place address on output
-         raddrhold <= raddrhold + 16'h1; // next address
+         raddrhold <= raddrhold + 1'b1; // next address
          if (intcyc) inta <= 1; // activate interrupt acknowledge
          else readmem <= 1; // activate memory read
          state <= `cpus_read2; // next state
@@ -1150,17 +1151,14 @@ module cpu8080(addr,     // Address out
 
       `cpus_read3: begin // continue read #3
 
-`ifndef NOWAIT
-         if (!waitr) 
-`endif
-            begin // no wait selected, otherwise cycle
+         if (!waitr) begin // no wait selected, otherwise cycle
 
             rdatahold2 <= rdatahold; // shift data
-            rdatahold <= data; // read new data
+            rdatahold <= din; // read new data CNS
             readmem <= 0; // deactivate instruction memory read
             inta <= 0; // deactivate interrupt acknowledge
             state <= nextstate; // get next macro state
-            statesel <= statesel+6'b1; // and index next in macro 
+            statesel <= statesel+1'b1; // and index next in macro 
 
          end
 
@@ -1199,23 +1197,6 @@ module cpu8080(addr,     // Address out
 
       end
 
-      `cpus_call: begin // call address
-
-         sp <= sp-16'h2; // pushdown stack
-         state <= `cpus_fetchi; // and return to instruction fetch
-         pc <= { rdatahold, rdatahold2 };
-
-      end
-
-      `cpus_ret: begin // return from call
-
-         sp <= sp+16'h2; // pushup stack
-         state <= `cpus_fetchi; // and return to instruction fetch
-         pc <= { rdatahold, rdatahold2 };
-
-      end
-
-`ifndef NOIO // if I/O instructions are to be included
       `cpus_in: begin // input single byte to A
 
          addr <= rdatahold; // place I/O address on address lines
@@ -1233,12 +1214,9 @@ module cpu8080(addr,     // Address out
 
       `cpus_in3: begin // input single byte to A #3
 
-`ifndef NOWAIT
-         if (!waitr) 
-`endif
-            begin // no wait selected, otherwise cycle
+         if (!waitr) begin // no wait selected, otherwise cycle
 
-            regfil[`reg_a] <= data; // place input data
+            regfil[`reg_a] <= din; // place input data CNS
             readio <= 0; // clear read I/O
             state <= `cpus_fetchi; // Fetch next instruction
 
@@ -1250,7 +1228,7 @@ module cpu8080(addr,     // Address out
 
          addr <= rdatahold; // place address on output
          datao <= regfil[`reg_a]; // set data to output
-         dataeno <= 1; // enable output data
+//         dataeno <= 1; // enable output data CNS
          state <= `cpus_out2; // next state
          
       end
@@ -1264,10 +1242,7 @@ module cpu8080(addr,     // Address out
 
       `cpus_out3: begin // continue out #3
 
-`ifndef NOWAIT
-         if (!waitr) 
-`endif
-            begin // no wait selected, otherwise cycle
+         if (!waitr) begin // no wait selected, otherwise cycle
 
             writeio <= 0; // disable write I/O data
             state <= `cpus_out4; // idle hold time
@@ -1278,18 +1253,19 @@ module cpu8080(addr,     // Address out
 
       `cpus_out4: begin // continue write #4
 
-         dataeno <= 0; // disable output data
+//         dataeno <= 0; // disable output data CNS
          state <= `cpus_fetchi; // Fetch next instruction
 
       end
-`endif
 
       `cpus_halt: begin // Halt waiting for interrupt
 
          // If there is an interrupt request and interrupts are enabled, then we
          // can leave halt. Otherwise we stay here.
-         if (intr&&ei) state <= `cpus_fetchi; // Fetch next instruction
+         if (ei&&(intr[1]||intr[2]||intr[3]||intr[4]||intr[5]||intr[6]||intr[7])) state <= `cpus_fetchi; // Fetch next instruction	// CNS
+//         if (intr&&ei) state <= `cpus_fetchi; // Fetch next instruction
          else state <= `cpus_halt;
+        
 
       end
 
@@ -1297,23 +1273,7 @@ module cpu8080(addr,     // Address out
 
          regfil[regd] <= rdatahold; // place data
          state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro 
-
-      end
-
-      `cpus_movtalua: begin // move to alu a
-
-         aluopra <= rdatahold; // place data
-         state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro 
-
-      end
-
-      `cpus_movtalub: begin // move to alu b
-
-         aluoprb <= rdatahold; // place data
-         state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro 
+         statesel <= statesel+1'b1; // and index next in macro 
 
       end
 
@@ -1337,19 +1297,6 @@ module cpu8080(addr,     // Address out
          parity <= alupar; // place parity
          auxcar <= aluaxc; // place auxiliary carry
          state <= `cpus_fetchi; // and return to instruction fetch
-
-      end
-
-      `cpus_indm: begin // inr/dcr cycleback to m
-
-         waddrhold <= regfil[`reg_h]<<8|regfil[`reg_l]; // place address
-         wdatahold <= alures; // place data to write
-         sign <= alures[7]; // place sign
-         zero <= aluzout; // place zero
-         parity <= alupar; // place parity
-         auxcar <= aluaxc; // place auxiliary carry
-         state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro 
 
       end
 
@@ -1388,7 +1335,7 @@ module cpu8080(addr,     // Address out
 
          wdatahold <= rdatahold; // move read to write data
          state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro
+         statesel <= statesel+1'b1; // and index next in macro cns
 
       end
 
@@ -1396,7 +1343,7 @@ module cpu8080(addr,     // Address out
 
          waddrhold <= { rdatahold, rdatahold2 };
          state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro
+         statesel <= statesel+1'b1; // and index next in macro cns
 
       end
 
@@ -1404,7 +1351,7 @@ module cpu8080(addr,     // Address out
 
          raddrhold <= { rdatahold, rdatahold2 };
          state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro
+         statesel <= statesel+1'b1; // and index next in macro cns
 
       end
 
@@ -1413,7 +1360,7 @@ module cpu8080(addr,     // Address out
          regfil[`reg_l] <= rdatahold2; // low
          regfil[`reg_h] <= rdatahold; // high
          state <= nextstate; // get next macro state
-         statesel <= statesel+6'b1; // and index next in macro CNS
+         statesel <= statesel+1'b1; // and index next in macro CNS
 
       end
 
@@ -1426,8 +1373,11 @@ module cpu8080(addr,     // Address out
 
       `cpus_daa: begin
 
-         if (regfil[`reg_a][7:4] > 9 || carry)
+         if (regfil[`reg_a][7:4] > 9 || carry) begin
+
             { carry, regfil[`reg_a] } <= regfil[`reg_a]+8'h60;
+
+         end
          state <= `cpus_fetchi; // and return to instruction fetch
 
       end
@@ -1437,7 +1387,7 @@ module cpu8080(addr,     // Address out
    endcase
 
    // Enable drive for data output
-   assign data = dataeno ? datao: 8'bz;
+   assign dout = datao; // CNS
 
    //
    // State macro generator
@@ -1480,108 +1430,90 @@ module cpu8080(addr,     // Address out
       // mac_readbmtw: read byte and move to write
 
       12: nextstate = `cpus_movrtw; // move read to write 
-      13: nextstate = `cpus_write; // write to destination
-      14: nextstate = `cpus_fetchi; // Fetch next instruction
+      13: nextstate = `cpus_fetchi; // Fetch next instruction
 
       // mac_readbmtr: read byte and move to register
 
-      15: nextstate = `cpus_movtr; // place in register
-      16: nextstate = `cpus_fetchi; // Fetch next instruction
+      14: nextstate = `cpus_movtr; // place in register
+      15: nextstate = `cpus_fetchi; // Fetch next instruction
 
       // mac_sta: STA
 
-      17: nextstate = `cpus_read; // read high byte
-      18: nextstate = `cpus_movrtwa; // move read to write address
-      19: nextstate = `cpus_write; // write to destination
-      20: nextstate = `cpus_fetchi; // Fetch next instruction
+      16: nextstate = `cpus_read; // read high byte
+      17: nextstate = `cpus_movrtwa; // move read to write address
+      18: nextstate = `cpus_write; // write to destination
+      19: nextstate = `cpus_fetchi; // Fetch next instruction
 
       // mac_lda: LDA
 
-      21: nextstate = `cpus_read; // read high byte
-      22: nextstate = `cpus_movrtra; // move read to write address
-      23: nextstate = `cpus_read; // read byte
-      24: nextstate = `cpus_movtr; // move to register
-      25: nextstate = `cpus_fetchi; // Fetch next instruction
+      20: nextstate = `cpus_read; // read high byte
+      21: nextstate = `cpus_movrtra; // move read to write address
+      22: nextstate = `cpus_read; // read byte
+      23: nextstate = `cpus_movtr; // move to register
+      24: nextstate = `cpus_fetchi; // Fetch next instruction
 
       // mac_shld: SHLD
 
-      26: nextstate = `cpus_read; // read high byte
-      27: nextstate = `cpus_movrtwa; // move read to write address
-      28: nextstate = `cpus_write; // write to destination low
-      29: nextstate = `cpus_write; // write to destination high
-      30: nextstate = `cpus_fetchi; // Fetch next instruction
+      25: nextstate = `cpus_read; // read high byte
+      26: nextstate = `cpus_movrtwa; // move read to write address
+      27: nextstate = `cpus_write; // write to destination low
+      28: nextstate = `cpus_write; // write to destination high
+      29: nextstate = `cpus_fetchi; // Fetch next instruction
 
       // mac_lhld: LHLD
 
-      31: nextstate = `cpus_read; // read high byte
-      32: nextstate = `cpus_movrtra; // move read to write address
-      33: nextstate = `cpus_read; // read byte low
-      34: nextstate = `cpus_read; // read byte high
-      35: nextstate = `cpus_lhld; // move to register
-      36: nextstate = `cpus_fetchi; // Fetch next instruction
+      30: nextstate = `cpus_read; // read high byte
+      31: nextstate = `cpus_movrtra; // move read to write address
+      32: nextstate = `cpus_read; // read byte low
+      33: nextstate = `cpus_read; // read byte high
+      34: nextstate = `cpus_lhld; // move to register
+      35: nextstate = `cpus_fetchi; // Fetch next instruction
 
       // mac_writedbyte: write double byte
 
-      37: nextstate = `cpus_write; // double write
-      38: nextstate = `cpus_fetchi; // then fetch
+      36: nextstate = `cpus_write; // double write
+      37: nextstate = `cpus_fetchi; // then fetch
 
       // mac_pop: POP
 
-      39: nextstate = `cpus_read; // double it
-      40: nextstate = `cpus_pop; // then finish
+      38: nextstate = `cpus_read; // double it
+      39: nextstate = `cpus_pop; // then finish
 
       // mac_xthl: XTHL
 
-      41: nextstate = `cpus_read; // double it
-      42: nextstate = `cpus_write; // then write
-      43: nextstate = `cpus_write; // double it
-      44: nextstate = `cpus_movmthl; // place word in hl
+      40: nextstate = `cpus_read; // double it
+      41: nextstate = `cpus_write; // then write
+      42: nextstate = `cpus_write; // double it
+      43: nextstate = `cpus_movmthl; // place word in hl
 
       // mac_accimm: accumulator immediate
 
-      45: nextstate = `cpus_accimm; // finish
+      44: nextstate = `cpus_accimm; // finish
 
       // mac_jmp: JMP
 
-      46: nextstate = `cpus_read; // double read
-      47: nextstate = `cpus_jmp; // then go pc
+      45: nextstate = `cpus_read; // double read
+      46: nextstate = `cpus_jmp; // then go pc
 
       // mac_call: CALL
 
-      48: nextstate = `cpus_read; // double read
-      49: nextstate = `cpus_write; // then write
-      50: nextstate = `cpus_write; // double write
-      51: nextstate = `cpus_call; // then go to that
+      47: nextstate = `cpus_read; // double read
+      48: nextstate = `cpus_write; // then write
+      49: nextstate = `cpus_write; // double write
+      50: nextstate = `cpus_jmp; // then go to that
 
       // mac_in: IN
 
-      52: nextstate = `cpus_in; // go to IN after getting that
+      51: nextstate = `cpus_in; // go to IN after getting that
 
       // mac_out: OUT
 
-      53: nextstate = `cpus_out; // go to OUT after getting that
+      52: nextstate = `cpus_out; // go to OUT after getting that
 
       // mac_rst: RST
 
-      54: nextstate = `cpus_write; // double write
-      55: nextstate = `cpus_jmp; // then go to that
-
-      // mac_ret: RET
-
-      56: nextstate = `cpus_read; // double read
-      57: nextstate = `cpus_ret; // then go to that
-
-      // mac_alum: op a,m
-
-      58: nextstate = `cpus_movtalub; // go move to alu a
-      59: nextstate = `cpus_alucb; // cycle back to acc
-
-      // mac_idm: inc/dec m
-
-      60: nextstate = `cpus_movtalua; // go move to alu b
-      61: nextstate = `cpus_indm; // set up alu result
-      62: nextstate = `cpus_write; // write it
-      63: nextstate = `cpus_fetchi; // Fetch next instruction
+      53: nextstate = `cpus_write; // double write
+      54: nextstate = `cpus_jmp; // then go to that
 
       default nextstate = 6'bx; // other states never reached
 
@@ -1625,29 +1557,28 @@ module alu(res, opra, oprb, cin, cout, zout, sout, parity, auxcar, sel);
          `aluop_add: begin // add
 
             { cout, resi } = opra+oprb; // find result and carry
-            // find auxiliary carry
-            auxcar = (((opra[3:0]+oprb[3:0]) >> 4) & 8'b1) ? 1'b1 : 1'b0;
+//            auxcar = ((opra[3:0]+oprb[3:0]) >> 4) & 1'b1; // find auxiliary carry
+//			if ((opra[3:0]+oprb[3:0])>>4) auxcar=1'b1; else auxcar=1'b0;
+            auxcar = (((opra[3:0]+oprb[3:0]) >> 4) & 1'b1) ? 1'b1 : 1'b0 ; // find auxiliary carry
+
 
          end
          `aluop_adc: begin // adc
 
             { cout, resi } = opra+oprb+cin; // find result and carry
-            // find auxiliary carry
-            auxcar = (((opra[3:0]+oprb[3:0]+cin) >> 4) & 8'b1) ? 1'b1 : 1'b0;
+            auxcar = (((opra[3:0]+oprb[3:0]+cin) >> 4) & 1'b1) ? 1'b1 : 1'b0; // find auxiliary carry
 
          end
          `aluop_sub, `aluop_cmp: begin // sub/cmp
 
             { cout, resi } = opra-oprb; // find result and carry
-            // find auxiliary borrow
-            auxcar = (((opra[3:0]-oprb[3:0]) >> 4) & 8'b1) ? 1'b1 : 1'b0;
+            auxcar = (((opra[3:0]-oprb[3:0]) >> 4) & 1'b1) ? 1'b1 : 1'b0; // find auxiliary borrow
 
          end
          `aluop_sbb: begin // sbb
 
             { cout, resi } = opra-oprb-cin; // find result and carry
-            // find auxiliary borrow 
-            auxcar = (((opra[3:0]-oprb[3:0]-cin >> 4)) & 8'b1) ? 1'b1 : 1'b0;
+            auxcar = (((opra[3:0]-oprb[3:0]-cin >> 4)) & 1'b1) ? 1'b1 : 1'b0; // find auxiliary borrow 
 
          end
          `aluop_and: begin // ana

@@ -2,15 +2,15 @@
    ./cpu8080_tbw_isim_beh.exe
      -intstyle  ise
      -ipchost  localhost
-     -ipcport  1244
+     -ipcport  1179
 
-Sat Nov 18 17:05:07 2006
+Sat Nov 18 23:42:47 2006
 
-Total Line Count = 5852
+Total Line Count = 5816
 
  Elaboration time 0.015625 sec.
 
- Estimate current memory usage 36.737 Meg. 
+ Estimate current memory usage 36.7329 Meg. 
 
  Total signals 323
  Total nets 542
@@ -46,6 +46,7 @@ ntrace select -o on -n /cpu8080_tbw/UUT/cpu/alusel
 ntrace select -o on -n /cpu8080_tbw/UUT/cpu/regfil 
 WARNING:Simulator:131 - Request to trace variable regfil was ignored. Tracing of
    array of vector type is not supported.
+ntrace select -o on -n /cpu8080_tbw/UUT/cpu/auxcar 
 ntrace start 
 run all 
 Simulator is doing circuit initialization process.
