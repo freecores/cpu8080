@@ -8,7 +8,7 @@
 // \   \   \/     Version : 8.2.02i
 //  \   \         Application : ISE
 //  /   /         Filename : cpu8080_tbw.ant
-// /___/   /\     Timestamp : Sat Nov 04 23:09:57 2006
+// /___/   /\     Timestamp : Sat Nov 18 13:39:13 2006
 // \   \  /  \ 
 //  \___\/\___\ 
 //
@@ -38,6 +38,7 @@ module cpu8080_tbw;
     reg ps2_data = 1'b0;
     reg reset_n = 1'b0;
     reg clock = 1'b0;
+    wire [7:0] diag;
 
     parameter PERIOD = 40;
     parameter real DUTY_CYCLE = 0.5;
@@ -72,7 +73,8 @@ module cpu8080_tbw;
         .ps2_clk(ps2_clk),
         .ps2_data(ps2_data),
         .reset_n(reset_n),
-        .clock(clock));
+        .clock(clock),
+        .diag(diag));
 
     integer TX_FILE = 0;
     integer TX_ERROR = 0;
@@ -92,6 +94,7 @@ module cpu8080_tbw;
         ANNOTATE_b;
         ANNOTATE_hsync_n;
         ANNOTATE_vsync_n;
+        ANNOTATE_diag;
         #OFFSET;
         forever begin
             #30;
@@ -108,13 +111,14 @@ module cpu8080_tbw;
             ANNOTATE_b;
             ANNOTATE_hsync_n;
             ANNOTATE_vsync_n;
+            ANNOTATE_diag;
             #10;
         end
     end
 
     initial begin  // Open the annotations file...
         TX_FILE = $fopen("C:\\Xilinx\\ISEexamples\\cpu8080\\cpu8080_tbw.ano");
-        #100040 // Final time:  100040 ns
+        #200040 // Final time:  200040 ns
         $display("Success! Annotation Simulation Complete.");
         $fdisplay(TX_FILE, "Total[%d]", TX_ERROR);
         $fclose(TX_FILE);
@@ -124,9 +128,9 @@ module cpu8080_tbw;
     initial begin
         // -------------  Current Time:  110ns
         #110;
-        reset_n = 1'b0;
         ps2_clk = 1'b1;
         ps2_data = 1'b1;
+        reset_n = 1'b0;
         reset_n = 1'b1;
         // -------------------------------------
         // -------------  Current Time:  390ns
@@ -451,6 +455,14 @@ module cpu8080_tbw;
     task ANNOTATE_vsync_n;
         #0 begin
             $fdisplay(TX_FILE, "Annotate[%d,vsync_n,%b]", $time, vsync_n);
+            $fflush(TX_FILE);
+            TX_ERROR = TX_ERROR + 1;
+        end
+    endtask
+
+    task ANNOTATE_diag;
+        #0 begin
+            $fdisplay(TX_FILE, "Annotate[%d,diag,%b]", $time, diag);
             $fflush(TX_FILE);
             TX_ERROR = TX_ERROR + 1;
         end

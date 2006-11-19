@@ -242,7 +242,23 @@ public:
         bool disable(HSim__s7* proc);
     };
     cu12 u12;
-    HSim__s1 us[14];
+    class cu13 : public HSimVlogTask{
+    public: 
+        HSim__s3 uv[1];
+        cu13(workMcpu8080__tbw* arch );
+        HSimVlogTaskCall * createTaskCall(HSim__s7 * process );
+        void deleteTaskCall(HSimVlogTaskCall *p );
+        void reset();
+        void constructObject();
+        int getSizeForArg(int argNumber);
+        workMcpu8080__tbw* Arch ;
+        HSimVector<HSimRegion *> activeInstanceList ;
+        HSimVector<HSimRegion *>  availableTaskCallObjList ;
+        ~cu13();
+        bool disable(HSim__s7* proc);
+    };
+    cu13 u13;
+    HSim__s1 us[15];
     HSim__s3 uv[7];
     HSimVlogParam up[3];
 };

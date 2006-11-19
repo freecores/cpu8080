@@ -507,7 +507,7 @@
       00000288 00000000 0E 45                465         mvi     c,$045
       0000028A 00000000 16 46                466         mvi     d,$046
       0000028C 00000000 1E 47                467         mvi     e,$047
-      0000028E 00000000 26 00                468         mvi     h,(temp0 / $0ff)        !high byte of test memory location
+      0000028E 00000000 26 10                468         mvi     h,(temp0 / $0ff)        !high byte of test memory location
       00000290 00000000 2E 00                469         mvi     l,(temp0 and $0ff)      !low byte of test memory location
       00000292 00000000 70                   470         mov     m,b
       00000293 00000000 06 00                471         mvi     b,$0
@@ -528,20 +528,20 @@
       000002AC 00000000 BB                   486         cmp     e
       000002AD 00000000 C4 FA 04             487         cnz     cpuer   !test "mov" m,e and e,m
       000002B0 00000000 74                   488         mov     m,h
-      000002B1 00000000 26 00                489         mvi     h,(temp0 / $0ff)
+      000002B1 00000000 26 10                489         mvi     h,(temp0 / $0ff)
       000002B3 00000000 2E 00                490         mvi     l,(temp0 and $0ff)
       000002B5 00000000 66                   491         mov     h,m
-      000002B6 00000000 3E 00                492         mvi     a,(temp0 / $0ff)
+      000002B6 00000000 3E 10                492         mvi     a,(temp0 / $0ff)
       000002B8 00000000 BC                   493         cmp     h
       000002B9 00000000 C4 FA 04             494         cnz     cpuer   !test "mov" m,h and h,m
       000002BC 00000000 75                   495         mov     m,l
-      000002BD 00000000 26 00                496         mvi     h,(temp0 / $0ff)
+      000002BD 00000000 26 10                496         mvi     h,(temp0 / $0ff)
       000002BF 00000000 2E 00                497         mvi     l,(temp0 and $0ff)
       000002C1 00000000 6E                   498         mov     l,m
       000002C2 00000000 3E 00                499         mvi     a,(temp0 and $0ff)
       000002C4 00000000 BD                   500         cmp     l
       000002C5 00000000 C4 FA 04             501         cnz     cpuer   !test "mov" m,l and l,m
-      000002C8 00000000 26 00                502         mvi     h,(temp0 / $0ff)
+      000002C8 00000000 26 10                502         mvi     h,(temp0 / $0ff)
       000002CA 00000000 2E 00                503         mvi     l,(temp0 and $0ff)
       000002CC 00000000 3E 32                504         mvi     a,$032
       000002CE 00000000 77                   505         mov     m,a
@@ -554,7 +554,7 @@
       000002DA 00000000 7E                   512         mov     a,m
       000002DB 00000000 FE 32                513         cpi     $032
       000002DD 00000000 C4 FA 04             514         cnz     cpuer   !test "mov" a,m
-      000002E0 00000000 26 00                515         mvi     h,(temp0 / $0ff)
+      000002E0 00000000 26 10                515         mvi     h,(temp0 / $0ff)
       000002E2 00000000 2E 00                516         mvi     l,(temp0 and $0ff)
 
 
@@ -642,7 +642,7 @@
       00000378 00000000 C4 FA 04             593         cnz     cpuer   !test "lhld" and "shld"
       0000037B 00000000 3A 01 05             594         lda     tempp+1
       0000037E 00000000 47                   595         mov     b,a
-      0000037F 00000000 3A 01 00             596         lda     temp0+1
+      0000037F 00000000 3A 01 10             596         lda     temp0+1
       00000382 00000000 B8                   597         cmp     b
       00000383 00000000 C4 FA 04             598         cnz     cpuer   !test "lhld" and "shld"
       00000386 00000000 3E AA                599         mvi     a,$0aa
